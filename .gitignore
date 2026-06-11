@@ -1,0 +1,33 @@
+## Build
+bin/
+obj/
+out/
+dist/
+publish/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## IDE
+.vs/
+.idea/
+.cursor/
+*.swp
+*~
+
+## App data / exports
+Exports/
+*.db
+*.db-journal
+
+## Logs
+logs/
+*.log
+
+## Local reference docs (use links in README instead)
+*.pdf
+
+## OS
+Thumbs.db
+Desktop.ini

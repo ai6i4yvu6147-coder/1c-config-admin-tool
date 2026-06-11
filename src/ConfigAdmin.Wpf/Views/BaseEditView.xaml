@@ -1,0 +1,54 @@
+<UserControl x:Class="ConfigAdmin.Wpf.Views.BaseEditView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="720">
+            <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12" />
+
+            <TextBlock Text="Подключение" FontWeight="SemiBold" Margin="0,0,0,8" />
+
+            <TextBlock Text="Клиент" />
+            <ComboBox ItemsSource="{Binding Clients}" SelectedItem="{Binding SelectedClient}" Margin="0,4,0,12" />
+
+            <TextBlock Text="Имя базы" />
+            <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,12" />
+
+            <TextBlock Text="Путь к 1cv8.exe" />
+            <Grid Margin="0,4,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0" Text="{Binding PlatformPath, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" />
+                <Button Grid.Column="1" Content="Обзор..." Command="{Binding BrowsePlatformCommand}" Padding="10,4" />
+            </Grid>
+
+            <CheckBox Content="Клиент-серверная база (/S)" IsChecked="{Binding IsServerConnection}" Margin="0,0,0,8" />
+            <TextBlock Text="Строка подключения (сервер\база или путь к файловой базе)" />
+            <TextBox Text="{Binding ConnectionString, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,12" />
+
+            <TextBlock Text="Пользователь 1С" />
+            <TextBox Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,12" />
+
+            <TextBlock Text="Пароль 1С (оставьте пустым, чтобы не менять)" />
+            <PasswordBox x:Name="PasswordBox" Margin="0,4,0,16" PasswordChanged="OnPasswordChanged" />
+
+            <TextBlock Text="Что выгружать по умолчанию" FontWeight="SemiBold" Margin="0,0,0,8" />
+            <CheckBox Content="Основная конфигурация" IsChecked="{Binding ExportConfiguration}" Margin="0,0,0,4" />
+            <CheckBox Content="Все расширения" IsChecked="{Binding ExportAllExtensions}" Margin="0,0,0,8" />
+
+            <TextBlock Text="Или укажите расширения по имени (по одному на строку)" />
+            <TextBox Text="{Binding SelectedExtensionsText, UpdateSourceTrigger=PropertyChanged}"
+                     AcceptsReturn="True" Height="80" Margin="0,4,0,12"
+                     IsEnabled="{Binding IsSelectedExtensionsEnabled}" />
+
+            <TextBlock Text="{Binding StatusMessage}" Foreground="Firebrick" TextWrapping="Wrap" Margin="0,0,0,12" />
+
+            <StackPanel Orientation="Horizontal">
+                <Button Content="Сохранить" Command="{Binding SaveCommand}" Padding="10,4" Margin="0,0,8,0" />
+                <Button Content="Проверить соединение" Command="{Binding TestConnectionCommand}" Padding="10,4" Margin="0,0,8,0" />
+                <Button Content="Назад" Command="{Binding BackCommand}" Padding="10,4" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

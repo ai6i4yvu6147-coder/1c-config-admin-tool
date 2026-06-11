@@ -1,0 +1,34 @@
+<UserControl x:Class="ConfigAdmin.Wpf.Views.MainView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <Button Content="Добавить клиента" Command="{Binding AddClientCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Добавить базу" Command="{Binding AddBaseCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Редактировать базу" Command="{Binding EditBaseCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Выгрузить" Command="{Binding ExportCommand}" Margin="0,0,8,0" Padding="10,4" FontWeight="SemiBold" />
+                <Button Content="Конфигуратор" Command="{Binding OpenConfiguratorCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Открыть каталог" Command="{Binding OpenFolderCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Логи" Command="{Binding OpenLogsCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Журнал всех баз" Command="{Binding OpenAllLogsCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Обновить" Command="{Binding RefreshCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Заблокировать" Command="{Binding LockCommand}" Padding="10,4" />
+            </StackPanel>
+            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="Gray" />
+        </StackPanel>
+
+        <DataGrid ItemsSource="{Binding Bases}"
+                  SelectedItem="{Binding SelectedBase}"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  CanUserAddRows="False">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Клиент / База" Binding="{Binding DisplayName}" Width="200" />
+                <DataGridTextColumn Header="Тип" Binding="{Binding ConnectionType}" Width="80" />
+                <DataGridTextColumn Header="Выгрузка" Binding="{Binding ExportSettingsSummary}" Width="*" />
+                <DataGridTextColumn Header="Последняя выгрузка" Binding="{Binding StatusText}" Width="180" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</UserControl>

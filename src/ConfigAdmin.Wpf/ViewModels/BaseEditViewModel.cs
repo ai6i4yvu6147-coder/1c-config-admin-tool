@@ -1,0 +1,290 @@
+using System.Collections.ObjectModel;
+using System.Windows.Input;
+using ConfigAdmin.Application.Services;
+using ConfigAdmin.Domain.Enums;
+using ConfigAdmin.Wpf.Services;
+
+namespace ConfigAdmin.Wpf.ViewModels;
+
+public sealed class BaseEditViewModel : ObservableObject
+{
+    private readonly ProfileService _profileService;
+    private readonly ConnectionTestService _connectionTestService;
+    private readonly FileDialogService _fileDialogService;
+    private readonly INavigationService _navigationService;
+
+    private Guid? _editingId;
+    private string _selectedClient = string.Empty;
+    private string _name = string.Empty;
+    private string _platformPath = string.Empty;
+    private bool _isServerConnection = true;
+    private string _connectionString = string.Empty;
+    private string _username = string.Empty;
+    private string _password = string.Empty;
+    private bool _exportConfiguration;
+    private bool _exportAllExtensions;
+    private string _selectedExtensionsText = string.Empty;
+    private string _statusMessage = string.Empty;
+
+    public BaseEditViewModel(
+        ProfileService profileService,
+        ConnectionTestService connectionTestService,
+        FileDialogService fileDialogService,
+        INavigationService navigationService)
+    {
+        _profileService = profileService;
+        _connectionTestService = connectionTestService;
+        _fileDialogService = fileDialogService;
+        _navigationService = navigationService;
+
+        Clients = new ObservableCollection<string>();
+        SaveCommand = new RelayCommand(SaveAsync);
+        TestConnectionCommand = new RelayCommand(TestConnectionAsync);
+        BrowsePlatformCommand = new RelayCommand(BrowsePlatform);
+        BackCommand = new RelayCommand(() => _navigationService.GoBack());
+        _ = LoadClientsAsync();
+    }
+
+    public ObservableCollection<string> Clients { get; }
+
+    public string SelectedClient
+    {
+        get => _selectedClient;
+        set => SetProperty(ref _selectedClient, value);
+    }
+
+    public string Name
+    {
+        get => _name;
+        set => SetProperty(ref _name, value);
+    }
+
+    public string PlatformPath
+    {
+        get => _platformPath;
+        set => SetProperty(ref _platformPath, value);
+    }
+
+    public bool IsServerConnection
+    {
+        get => _isServerConnection;
+        set => SetProperty(ref _isServerConnection, value);
+    }
+
+    public string ConnectionString
+    {
+        get => _connectionString;
+        set => SetProperty(ref _connectionString, value);
+    }
+
+    public string Username
+    {
+        get => _username;
+        set => SetProperty(ref _username, value);
+    }
+
+    public string Password
+    {
+        get => _password;
+        set => SetProperty(ref _password, value);
+    }
+
+    public bool ExportConfiguration
+    {
+        get => _exportConfiguration;
+        set => SetProperty(ref _exportConfiguration, value);
+    }
+
+    public bool ExportAllExtensions
+    {
+        get => _exportAllExtensions;
+        set
+        {
+            SetProperty(ref _exportAllExtensions, value);
+            RaisePropertyChanged(nameof(IsSelectedExtensionsEnabled));
+        }
+    }
+
+    public string SelectedExtensionsText
+    {
+        get => _selectedExtensionsText;
+        set => SetProperty(ref _selectedExtensionsText, value);
+    }
+
+    public bool IsSelectedExtensionsEnabled => !ExportAllExtensions;
+
+    public string StatusMessage
+    {
+        get => _statusMessage;
+        set => SetProperty(ref _statusMessage, value);
+    }
+
+    public string Title => _editingId is null ? "Новая база" : "Редактирование базы";
+
+    public RelayCommand SaveCommand { get; }
+    public RelayCommand TestConnectionCommand { get; }
+    public RelayCommand BrowsePlatformCommand { get; }
+    public RelayCommand BackCommand { get; }
+
+    public async void BeginCreate()
+    {
+        _editingId = null;
+        ResetFields();
+        await LoadClientsAsync();
+
+        if (Clients.Count == 0)
+            StatusMessage = "Сначала добавьте клиента (кнопка «Добавить клиента» на главном экране).";
+
+        RaisePropertyChanged(nameof(Title));
+    }
+
+    public async void BeginEdit(Guid id)
+    {
+        _editingId = id;
+        var profile = await _profileService.GetInfobaseByIdAsync(id);
+        if (profile is null)
+            return;
+
+        await LoadClientsAsync();
+        var clients = await _profileService.GetClientsAsync();
+        var client = clients.FirstOrDefault(c => c.Id == profile.ClientId);
+
+        SelectedClient = client?.Name ?? string.Empty;
+        Name = profile.Name;
+        PlatformPath = profile.PlatformPath;
+        IsServerConnection = profile.ConnectionType == ConnectionType.Server;
+        ConnectionString = profile.ConnectionString;
+        Username = profile.Username ?? string.Empty;
+        Password = string.Empty;
+        ExportConfiguration = profile.ExportConfiguration;
+        ExportAllExtensions = profile.ExportAllExtensions;
+        SelectedExtensionsText = string.Join(Environment.NewLine, profile.SelectedExtensions);
+        StatusMessage = string.Empty;
+        RaisePropertyChanged(nameof(Title));
+    }
+
+    private async Task LoadClientsAsync()
+    {
+        Clients.Clear();
+        foreach (var client in await _profileService.GetClientsAsync())
+            Clients.Add(client.Name);
+
+        if (Clients.Count > 0 && string.IsNullOrWhiteSpace(SelectedClient))
+            SelectedClient = Clients[0];
+    }
+
+    private void ResetFields()
+    {
+        Name = string.Empty;
+        PlatformPath = string.Empty;
+        IsServerConnection = true;
+        ConnectionString = string.Empty;
+        Username = string.Empty;
+        Password = string.Empty;
+        ExportConfiguration = false;
+        ExportAllExtensions = false;
+        SelectedExtensionsText = string.Empty;
+        StatusMessage = string.Empty;
+    }
+
+    private void BrowsePlatform()
+    {
+        var path = _fileDialogService.PickExecutable(PlatformPath);
+        if (!string.IsNullOrWhiteSpace(path))
+            PlatformPath = path;
+    }
+
+    private List<string> ParseExtensions() =>
+        SelectedExtensionsText
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+    private bool ValidateExportSettings()
+    {
+        if (ExportConfiguration || ExportAllExtensions)
+            return true;
+
+        return ParseExtensions().Count > 0;
+    }
+
+    private async Task SaveAsync()
+    {
+        try
+        {
+            if (Clients.Count == 0)
+            {
+                StatusMessage = "Сначала добавьте клиента.";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(SelectedClient) ||
+                string.IsNullOrWhiteSpace(Name) ||
+                string.IsNullOrWhiteSpace(PlatformPath) ||
+                string.IsNullOrWhiteSpace(ConnectionString))
+            {
+                StatusMessage = "Заполните обязательные поля подключения.";
+                return;
+            }
+
+            if (!ValidateExportSettings())
+            {
+                StatusMessage = "Укажите что выгружать: конфигурацию, все расширения или список расширений.";
+                return;
+            }
+
+            await _profileService.AddOrUpdateInfobaseAsync(
+                SelectedClient,
+                Name,
+                PlatformPath,
+                IsServerConnection ? ConnectionType.Server : ConnectionType.File,
+                ConnectionString,
+                Username,
+                string.IsNullOrWhiteSpace(Password) ? null : Password,
+                ExportConfiguration,
+                ExportAllExtensions,
+                ParseExtensions());
+
+            _navigationService.GoBack();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = ex.Message;
+        }
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(SelectedClient) ||
+                string.IsNullOrWhiteSpace(Name) ||
+                string.IsNullOrWhiteSpace(PlatformPath) ||
+                string.IsNullOrWhiteSpace(ConnectionString))
+            {
+                StatusMessage = "Заполните поля подключения перед проверкой.";
+                return;
+            }
+
+            var profile = await _profileService.AddOrUpdateInfobaseAsync(
+                SelectedClient,
+                Name,
+                PlatformPath,
+                IsServerConnection ? ConnectionType.Server : ConnectionType.File,
+                ConnectionString,
+                Username,
+                string.IsNullOrWhiteSpace(Password) ? null : Password,
+                ExportConfiguration,
+                ExportAllExtensions,
+                ParseExtensions());
+
+            var result = await _connectionTestService.TestAsync(profile);
+            StatusMessage = result.Success
+                ? "Подключение успешно."
+                : $"Ошибка подключения (код {result.ExitCode}): {result.StandardError}";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = ex.Message;
+        }
+    }
+}
