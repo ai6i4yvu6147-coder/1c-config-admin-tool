@@ -37,7 +37,7 @@ flowchart LR
 1. Загрузка профиля базы и клиента из SQLite.
 2. Расшифровка пароля базы (если vault unlocked).
 3. Шаги: основная конфигурация → все расширения или выбранные.
-4. Каждый шаг — subprocess `1cv8.exe` с `/DumpConfigToFiles`, `/Out`, `/DumpResult`.
+4. Каждый шаг — subprocess `1cv8.exe` с `/DumpConfigToFiles`, `/Out`, `/DumpResult`. См. [`onec-cli-reference.md`](onec-cli-reference.md).
 5. Temp-каталог → atomic replace целевых каталогов в `{ExportRoot}`.
 6. Запись `export_runs` и артефактов в `%AppData%\ConfigAdmin\runs\`.
 

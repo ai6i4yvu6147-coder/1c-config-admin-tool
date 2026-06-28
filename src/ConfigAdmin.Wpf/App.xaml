@@ -5,6 +5,7 @@
              Startup="OnStartup"
              ShutdownMode="OnMainWindowClose">
     <Application.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
         <converters:InverseBoolConverter x:Key="InverseBool" />
     </Application.Resources>

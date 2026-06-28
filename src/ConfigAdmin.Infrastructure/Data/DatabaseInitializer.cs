@@ -93,6 +93,22 @@ public sealed class DatabaseInitializer
               node_id TEXT NOT NULL REFERENCES remote_nodes(id),
               expires_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS sync_jobs (
+              id TEXT PRIMARY KEY,
+              infobase_id TEXT NOT NULL REFERENCES infobases(id),
+              remote_node_id TEXT NOT NULL REFERENCES remote_nodes(id),
+              status INTEGER NOT NULL,
+              requested_at TEXT NOT NULL,
+              started_at TEXT,
+              finished_at TEXT,
+              upload_session_id TEXT,
+              bytes_total INTEGER NOT NULL DEFAULT 0,
+              bytes_received INTEGER NOT NULL DEFAULT 0,
+              content_sha256 TEXT,
+              error_message TEXT,
+              sync_mcp_after_complete INTEGER NOT NULL DEFAULT 0
+            );
             """;
 
         await connection.ExecuteAsync(new CommandDefinition(sql, cancellationToken: ct));
@@ -103,7 +119,7 @@ public sealed class DatabaseInitializer
         Microsoft.Data.Sqlite.SqliteConnection connection,
         CancellationToken ct)
     {
-        foreach (var column in new[] { "project_id", "config_mcp_project_id" })
+        foreach (var column in new[] { "project_id", "config_mcp_project_id", "export_location", "remote_node_id", "remote_export_path" })
         {
             var hasColumn = await connection.ExecuteScalarAsync<long>(
                 new CommandDefinition(
@@ -113,9 +129,14 @@ public sealed class DatabaseInitializer
 
             if (hasColumn == 0)
             {
-                await connection.ExecuteAsync(new CommandDefinition(
-                    $"ALTER TABLE infobases ADD COLUMN {column} TEXT",
-                    cancellationToken: ct));
+                var sql = column switch
+                {
+                    "export_location" => "ALTER TABLE infobases ADD COLUMN export_location INTEGER NOT NULL DEFAULT 0",
+                    "remote_node_id" => "ALTER TABLE infobases ADD COLUMN remote_node_id TEXT",
+                    "remote_export_path" => "ALTER TABLE infobases ADD COLUMN remote_export_path TEXT",
+                    _ => $"ALTER TABLE infobases ADD COLUMN {column} TEXT"
+                };
+                await connection.ExecuteAsync(new CommandDefinition(sql, cancellationToken: ct));
             }
         }
 

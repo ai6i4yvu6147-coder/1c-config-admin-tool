@@ -31,6 +31,9 @@
             </StackPanel>
 
             <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBlock Text="{Binding CurrentProgress}" TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,4" />
+            <ProgressBar Height="8" Margin="0,0,0,8"
+                         IsIndeterminate="{Binding IsProcessingJob}" />
             <TextBlock Text="{Binding LastHeartbeatText, StringFormat=Последний heartbeat: {0}}" Margin="0,0,0,8" />
             <TextBlock Text="{Binding StatusMessage}" Foreground="Firebrick" TextWrapping="Wrap" Margin="0,0,0,4" />
             <Button Content="Копировать ошибку"

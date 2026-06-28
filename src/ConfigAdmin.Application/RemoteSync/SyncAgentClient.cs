@@ -8,6 +8,15 @@ namespace ConfigAdmin.Application.RemoteSync;
 
 public sealed class SyncAgentClient
 {
+    /// <summary>JSON API: register, heartbeat, poll.</summary>
+    public const int DefaultRequestTimeoutSeconds = 30;
+
+    /// <summary>Chunk PUT — см. transport.md (120s); запас под медленный Funnel.</summary>
+    public const int ChunkUploadTimeoutSeconds = 180;
+
+    /// <summary>Complete: assemble + SHA-256 + unzip + apply на Hub.</summary>
+    public const int CompleteUploadTimeoutSeconds = 600;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -22,7 +31,7 @@ public sealed class SyncAgentClient
     }
 
     public static HttpClient CreateDefaultHttpClient() =>
-        new(CreateHandler()) { Timeout = TimeSpan.FromSeconds(30) };
+        new(CreateHandler()) { Timeout = Timeout.InfiniteTimeSpan };
 
     private static SocketsHttpHandler CreateHandler() =>
         new()
@@ -105,12 +114,12 @@ public sealed class SyncAgentClient
         RegisterAgentRequest request,
         CancellationToken ct = default)
     {
-        using var response = await _httpClient.PostAsJsonAsync(
-            BuildUri(hubUrl, "/api/sync-agent/register"),
-            request,
-            JsonOptions,
-            ct);
+        using var message = new HttpRequestMessage(HttpMethod.Post, BuildUri(hubUrl, "/api/sync-agent/register"))
+        {
+            Content = JsonContent.Create(request, options: JsonOptions)
+        };
 
+        using var response = await SendAsync(message, TimeSpan.FromSeconds(DefaultRequestTimeoutSeconds), ct);
         await EnsureSuccessOrThrowAsync(response, ct);
         return (await response.Content.ReadFromJsonAsync<RegisterAgentResponse>(JsonOptions, ct))!;
     }
@@ -127,7 +136,7 @@ public sealed class SyncAgentClient
         };
         message.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 
-        using var response = await _httpClient.SendAsync(message, ct);
+        using var response = await SendAsync(message, TimeSpan.FromSeconds(DefaultRequestTimeoutSeconds), ct);
         await EnsureSuccessOrThrowAsync(response, ct);
     }
 
@@ -142,9 +151,120 @@ public sealed class SyncAgentClient
             BuildUri(hubUrl, $"/api/sync-agent/jobs?nodeId={nodeId:D}"));
         message.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 
-        using var response = await _httpClient.SendAsync(message, ct);
+        using var response = await SendAsync(message, TimeSpan.FromSeconds(DefaultRequestTimeoutSeconds), ct);
         await EnsureSuccessOrThrowAsync(response, ct);
         return (await response.Content.ReadFromJsonAsync<PollJobsResponse>(JsonOptions, ct))!;
+    }
+
+    public async Task<CreateUploadSessionResponse> CreateUploadSessionAsync(
+        string hubUrl,
+        string accessToken,
+        CreateUploadSessionRequest request,
+        CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, BuildUri(hubUrl, "/api/sync-upload/sessions"))
+        {
+            Content = JsonContent.Create(request, options: JsonOptions)
+        };
+        message.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var response = await SendAsync(message, TimeSpan.FromSeconds(DefaultRequestTimeoutSeconds), ct);
+        await EnsureSuccessOrThrowAsync(response, ct);
+        return (await response.Content.ReadFromJsonAsync<CreateUploadSessionResponse>(JsonOptions, ct))!;
+    }
+
+    public async Task<ChunkUploadResponse> UploadChunkAsync(
+        string hubUrl,
+        string accessToken,
+        Guid sessionId,
+        int chunkIndex,
+        Stream chunkStream,
+        CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(
+            HttpMethod.Put,
+            BuildUri(hubUrl, $"/api/sync-upload/sessions/{sessionId:D}/chunks/{chunkIndex}"))
+        {
+            Content = new StreamContent(chunkStream)
+        };
+        message.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        message.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var response = await SendAsync(
+            message,
+            TimeSpan.FromSeconds(ChunkUploadTimeoutSeconds),
+            HttpCompletionOption.ResponseHeadersRead,
+            ct);
+        await EnsureSuccessOrThrowAsync(response, ct);
+        return (await response.Content.ReadFromJsonAsync<ChunkUploadResponse>(JsonOptions, ct))!;
+    }
+
+    public async Task<UploadSessionStateResponse> GetUploadSessionAsync(
+        string hubUrl,
+        string accessToken,
+        Guid sessionId,
+        CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(
+            HttpMethod.Get,
+            BuildUri(hubUrl, $"/api/sync-upload/sessions/{sessionId:D}"));
+        message.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var response = await SendAsync(message, TimeSpan.FromSeconds(DefaultRequestTimeoutSeconds), ct);
+        await EnsureSuccessOrThrowAsync(response, ct);
+        return (await response.Content.ReadFromJsonAsync<UploadSessionStateResponse>(JsonOptions, ct))!;
+    }
+
+    public async Task<CompleteUploadResponse> CompleteUploadAsync(
+        string hubUrl,
+        string accessToken,
+        Guid sessionId,
+        CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(
+            HttpMethod.Post,
+            BuildUri(hubUrl, $"/api/sync-upload/sessions/{sessionId:D}/complete"));
+        message.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var response = await SendAsync(message, TimeSpan.FromSeconds(CompleteUploadTimeoutSeconds), ct);
+        await EnsureSuccessOrThrowAsync(response, ct);
+        return (await response.Content.ReadFromJsonAsync<CompleteUploadResponse>(JsonOptions, ct))!;
+    }
+
+    public async Task FailJobAsync(
+        string hubUrl,
+        string accessToken,
+        Guid jobId,
+        string errorMessage,
+        CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(
+            HttpMethod.Post,
+            BuildUri(hubUrl, $"/api/sync-agent/jobs/{jobId:D}/fail"))
+        {
+            Content = JsonContent.Create(new FailJobRequest { ErrorMessage = errorMessage }, options: JsonOptions)
+        };
+        message.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var response = await SendAsync(message, TimeSpan.FromSeconds(DefaultRequestTimeoutSeconds), ct);
+        await EnsureSuccessOrThrowAsync(response, ct);
+    }
+
+    private Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage message,
+        TimeSpan timeout,
+        CancellationToken ct) =>
+        SendAsync(message, timeout, HttpCompletionOption.ResponseContentRead, ct);
+
+    private async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage message,
+        TimeSpan timeout,
+        HttpCompletionOption completionOption,
+        CancellationToken ct)
+    {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(timeout);
+        return await _httpClient.SendAsync(message, completionOption, timeoutCts.Token);
     }
 
     private static Uri BuildUri(string hubUrl, string path)

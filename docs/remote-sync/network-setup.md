@@ -26,7 +26,7 @@ Hub ПК (Админка)  <--proxy--  127.0.0.1:18443  SyncReceiverHost (Kestre
    ```
    Войти в аккаунт Tailscale, если попросит. Funnel включается на tailnet.
 3. URL сохранится в `%AppData%\ConfigAdmin\sync-tunnel.url`, например:
-   `https://workstation.tailce456c.ts.net`
+   `https://<your-machine>.<tailnet>.ts.net`
 4. Указать этот URL в карточке RDP-узла (поле Hub URL / подсказка).
 
 ### Hub (каждый рабочий сеанс)

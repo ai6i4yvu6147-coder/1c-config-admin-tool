@@ -7,6 +7,7 @@
 | Документ | Для кого | Содержание |
 |----------|----------|------------|
 | [`integration.md`](integration.md) | разработчики **этого репо** | принципы, статус, roadmap, ownership |
+| [`registry-mapping.md`](registry-mapping.md) | Hub + config-mcp | **согласованный** mapping registry (agreed 2026-06-28) |
 | [`protocol-v1.md`](protocol-v1.md) | все модули | Consolidated Protocol v1 |
 | [`protocol-v1.0.1-addendum.md`](protocol-v1.0.1-addendum.md) | все модули | schemas, discovery, exit codes, sync |
 | [`protocol-v1.0.2-addendum.md`](protocol-v1.0.2-addendum.md) | все модули | Hub persistence, reconcile, IDs, workflows |

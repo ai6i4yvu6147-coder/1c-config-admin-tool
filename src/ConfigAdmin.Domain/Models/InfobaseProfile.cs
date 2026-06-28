@@ -20,4 +20,7 @@ public sealed class InfobaseProfile
     public ExportStatus LastExportStatus { get; set; } = ExportStatus.Unknown;
     public Guid? ProjectId { get; set; }
     public Guid? ConfigMcpProjectId { get; set; }
+    public ExportLocation ExportLocation { get; set; } = ExportLocation.Local;
+    public Guid? RemoteNodeId { get; set; }
+    public string? RemoteExportPath { get; set; }
 }

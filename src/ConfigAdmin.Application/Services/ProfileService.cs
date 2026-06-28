@@ -63,6 +63,9 @@ public sealed class ProfileService
         bool exportAllExtensions = true,
         IEnumerable<string>? selectedExtensions = null,
         ExportFormat format = ExportFormat.Hierarchical,
+        ExportLocation exportLocation = ExportLocation.Local,
+        Guid? remoteNodeId = null,
+        string? remoteExportPath = null,
         CancellationToken ct = default)
     {
         var client = await _clientRepository.GetByNameAsync(clientName, ct)
@@ -81,6 +84,9 @@ public sealed class ProfileService
         profile.ExportAllExtensions = exportAllExtensions;
         profile.SelectedExtensions = selectedExtensions?.ToList() ?? [];
         profile.ExportFormat = format;
+        profile.ExportLocation = exportLocation;
+        profile.RemoteNodeId = remoteNodeId;
+        profile.RemoteExportPath = string.IsNullOrWhiteSpace(remoteExportPath) ? null : remoteExportPath.Trim();
 
         if (!string.IsNullOrEmpty(password))
             profile.EncryptedPassword = _secretVault.Encrypt(password);

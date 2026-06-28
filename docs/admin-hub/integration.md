@@ -12,6 +12,8 @@
 
 - **config-mcp Phase 1 (ConfigAdmin side):** **готово** — Hub tables в SQLite, экран MCP, sync через `apply-registry`, post-export sync.
 
+- **Registry mapping (Hub ↔ config-mcp):** **согласовано 2026-06-28** — см. [`registry-mapping.md`](registry-mapping.md).
+
 - **ConfigAdmin protocol CLI** (inventory/status/export-registry для самого Hub): не начато.
 
 - **Режим по умолчанию:** standalone; `managed` — после явной настройки manifest.
@@ -146,7 +148,7 @@ Portable config-mcp (проверенный путь): `C:\1c_config_mcp_server_
 
 | exportRootPath, connection (без plain password) | export_runs, runs/, Serilog |
 
-| cross-module links (`config_mcp_project_id`) | export locks |
+| cross-module links (`config_mcp_project_id` на Client — целевое; на infobase — R1) | export locks |
 
 | platformVersion (canonical) | |
 
@@ -158,25 +160,29 @@ Portable config-mcp (проверенный путь): `C:\1c_config_mcp_server_
 
 
 
-### Registry fragment (config-mcp)
+### Согласованный mapping (config-mcp)
 
+**Статус:** agreed 2026-06-28. **Канон:** [`registry-mapping.md`](registry-mapping.md).
 
+Кратко:
 
-`ConfigMcpFragmentBuilder` materializes fragment для `apply-registry`:
+- **config-mcp `project`** ≈ **Hub Client** (1:1; имя `project` в JSON не переименовываем).
+- **config-mcp `database`** = одна **выгрузка** (base или extension), не инфобаза 1С целиком.
+- **`infobaseId` в fragment** = id выгрузки (`ConfigurationExport.id`), не `infobases.id`.
+- **Hub `projects` (SQLite)** не материализуется в `projects.json`.
+- **Целевой fragment:** один project на Client, N `databases[]`, patch после export.
+- **H6** (`rebuild-index` orchestration): после P0 CLI config-mcp.
 
+Архив: [`registry-mapping-config-mcp-response-2026-06-28.md`](registry-mapping-config-mcp-response-2026-06-28.md), [`registry-mapping-hub-response-2026-06-28.md`](registry-mapping-hub-response-2026-06-28.md).
 
+### Registry fragment (config-mcp) — **R1, переходный**
 
-- `projectId` = `infobases.config_mcp_project_id`
+`ConfigMcpFragmentBuilder` сейчас (до registry R2):
 
+- `projectId` = `infobases.config_mcp_project_id` → **целевое:** `clients.config_mcp_project_id`
 - `clientId` = `clients.id`
-
-- `infobaseId` = `infobases.id`
-
-- `sourcePath` = `{ExportRoot}/{Client}/{Base}/Основная конфигурация`
-
-- `sourceKind` = `directory`
-
-
+- `infobaseId` = `infobases.id` → **целевое:** `ConfigurationExport.id` per export
+- одна database, только «Основная конфигурация`
 
 CLI: `Tools/1c-config-cli.exe --root "<portable>" apply-registry --input fragment.json --json`
 
@@ -210,13 +216,15 @@ CLI: `Tools/1c-config-cli.exe --root "<portable>" apply-registry --input fragmen
 
 
 
-1. Выгрузка конфигурации (WPF или CLI export)
+1. Выгрузка конфигурации (WPF или CLI export) **или** Remote Sync complete на Hub
 
 2. Hub обновляет `sourcePath` через `apply-registry` fragment
 
 3. `apply-registry` → config-mcp `projects.json`
 
-4. `followUpOperations`: `rebuild-index` — показывается пользователю (rebuild CLI — Phase 3 config-mcp)
+4. **`rebuild-index`** — парсинг XML в index db config-mcp (целевой полный цикл)
+
+5. Сейчас шаг 4: только `followUpOperations` hint в UI; автоматический вызов — **Phase 3** (Admin Hub protocol)
 
 
 

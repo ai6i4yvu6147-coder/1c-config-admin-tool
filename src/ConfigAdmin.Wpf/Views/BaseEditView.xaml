@@ -37,10 +37,30 @@
             <CheckBox Content="Основная конфигурация" IsChecked="{Binding ExportConfiguration}" Margin="0,0,0,4" />
             <CheckBox Content="Все расширения" IsChecked="{Binding ExportAllExtensions}" Margin="0,0,0,8" />
 
-            <TextBlock Text="Или укажите расширения по имени (по одному на строку)" />
+            <CheckBox Content="Выбранные расширения (по одному на строку, -Extension)" Margin="0,0,0,4" />
             <TextBox Text="{Binding SelectedExtensionsText, UpdateSourceTrigger=PropertyChanged}"
-                     AcceptsReturn="True" Height="80" Margin="0,4,0,12"
+                     AcceptsReturn="True" Height="90" Margin="0,0,0,12"
                      IsEnabled="{Binding IsSelectedExtensionsEnabled}" />
+
+            <TextBlock Text="Расположение выгрузки" FontWeight="SemiBold" Margin="0,8,0,8" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <RadioButton Content="Локальная" IsChecked="{Binding IsLocalExport}" Margin="0,0,16,0" GroupName="ExportLocation" />
+                <RadioButton Content="Remote (RDP)" IsChecked="{Binding IsRemoteExport}" GroupName="ExportLocation" />
+            </StackPanel>
+
+            <StackPanel Margin="0,0,0,12" IsEnabled="{Binding IsRemoteExport}">
+                <TextBlock Text="RDP-узел" />
+                <ComboBox ItemsSource="{Binding RemoteNodes}"
+                          SelectedValue="{Binding SelectedRemoteNodeId}"
+                          SelectedValuePath="Id"
+                          DisplayMemberPath="Name"
+                          Margin="0,4,0,8" />
+                <TextBlock Text="Путь выгрузки на RDP (необязательно, пусто = temp)" />
+                <TextBox Text="{Binding RemoteExportPath, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,8" />
+            </StackPanel>
+
+            <TextBlock Text="Локальный каталог (Hub)" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBlock Text="{Binding LocalTargetHint}" TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,12" />
 
             <TextBlock Text="{Binding StatusMessage}" Foreground="Firebrick" TextWrapping="Wrap" Margin="0,0,0,12" />
 

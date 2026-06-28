@@ -58,6 +58,61 @@ Content-Type: application/json
 
 Token TTL: 7 дней (renew on register); хранится в agent local settings (DPAPI).
 
+### 2.3. Job credentials (encryptedConnectionPassword)
+
+Пароль подключения к базе 1С **authoritative на Hub** (vault + `infobases.encrypted_password`). Передатчик **не** запрашивает пароль у пользователя.
+
+**Предусловие Hub:** vault разблокирован. Без unlock sync недоступен (ошибка «Разблокируйте vault»).
+
+При выдаче job в poll response Hub включает поле `encryptedConnectionPassword` — **AES-GCM blob**, не plain text:
+
+```text
+blob = nonce(12) || tag(16) || ciphertext
+```
+
+**Ключ (Hub ↔ Agent, valid accessToken):**
+
+```text
+key = HKDF-SHA256(
+  ikm = SHA256(accessToken),
+  salt = jobId (16 bytes, UUID),
+  info = "configadmin-sync-job-v1",
+  length = 32)
+```
+
+- **Hub** (claim job): `_secretVault.Decrypt(profile.EncryptedPassword)` → `JobCredentialsCipher.Encrypt(...)` → DTO.
+- **Agent:** `JobCredentialsCipher.Decrypt(accessToken, jobId, nodeId, blob)`.
+- **AAD:** `jobId` (16 bytes) || `nodeId` (16 bytes) — защита от подмены job.
+- Plain password **не логировать**, не писать в resume JSON; zeroize после export.
+
+Pairing-пароль **не** используется для шифрования job (одноразовый при register). Канал защищён TLS + Bearer; cipher — defense in depth против утечки в логах/прокси.
+
+**Poll job response (фрагмент):**
+
+```json
+{
+  "job": {
+    "jobId": "uuid",
+    "nodeId": "uuid",
+    "action": "exportAndUpload",
+    "remoteExportPath": "",
+    "packaging": "zip",
+    "maxChunkSizeBytes": 8388608,
+    "export": {
+      "platformPath": "C:\\Program Files\\1cv8\\8.3.24.1234\\bin\\1cv8.exe",
+      "connectionType": "File",
+      "connectionString": "C:\\Bases\\Demo",
+      "username": null,
+      "exportConfiguration": true,
+      "exportFormat": "Hierarchical"
+    },
+    "encryptedConnectionPassword": "<base64 or raw bytes in JSON>"
+  }
+}
+```
+
+`remoteExportPath` пустой → Agent использует temp: `%AppData%\ConfigAdmin\agent\work\{jobId}\Основная конфигурация` (cleanup после upload).
+
 ---
 
 ## 3. Poll jobs (Agent → Hub)
@@ -87,7 +142,22 @@ Authorization: Bearer ...
 { "job": null }
 ```
 
-Hub переводит job `Pending` → `Claimed` при первой выдаче agent'у.
+Hub переводит job `Pending` → `Claimed` при первой выдаче agent'u.
+
+### 3.1. Fail job (Agent → Hub)
+
+При ошибке export/upload на RDP:
+
+```http
+POST /api/sync-agent/jobs/{jobId}/fail
+Authorization: Bearer ...
+
+{ "errorMessage": "DumpConfigToFiles failed: ..." }
+```
+
+**Response 200:** job → `Failed`, `error_message` сохранён.
+
+**Response 400:** job не найден или не принадлежит узлу.
 
 ---
 
@@ -203,10 +273,10 @@ Hub:
 POST /api/sync-agent/heartbeat
 Authorization: Bearer ...
 
-{ "nodeId": "uuid", "status": "idle" | "uploading", "currentJobId": null }
+{ "nodeId": "uuid", "status": "idle" | "exporting" | "uploading", "currentJobId": null, "progressMessage": "optional detail for Hub UI" }
 ```
 
-Hub обновляет `remote_nodes.last_seen_at`.
+Hub обновляет `remote_nodes.last_seen_at`. Если указаны `currentJobId` и `status` (`exporting` / `uploading`), job переводится в соответствующий статус; `progressMessage` показывается в UI Hub (in-memory, без записи в БД).
 
 ---
 

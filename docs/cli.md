@@ -75,3 +75,7 @@ dotnet run --project src/ConfigAdmin.Wpf
 ```
 
 GUI не заменяет CLI для automation и Admin Hub orchestration.
+
+### 1cv8.exe (DESIGNER)
+
+Параметры выгрузки (`/DumpConfigToFiles`, расширения, `/Out`, `/DumpResult`) — [`onec-cli-reference.md`](onec-cli-reference.md).

@@ -7,6 +7,7 @@ namespace ConfigAdmin.Application.RemoteSync;
 public sealed class SyncAgentConnectionService : IAsyncDisposable
 {
     private readonly SyncAgentClient _client;
+    private readonly SyncAgentJobProcessor _jobProcessor;
     private readonly ILogger<SyncAgentConnectionService> _logger;
     private CancellationTokenSource? _loopCts;
     private Task? _loopTask;
@@ -14,22 +15,32 @@ public sealed class SyncAgentConnectionService : IAsyncDisposable
     private Guid _nodeId;
     private string? _accessToken;
     private int _pollIntervalMs = SyncAgentHubService.DefaultPollIntervalMs;
+    private bool _processingJob;
+    private Guid? _activeJobId;
+    private string? _lastProgressMessage;
+    private DateTimeOffset _lastProgressHeartbeatUtc;
 
     public SyncAgentConnectionService(
         SyncAgentClient client,
+        SyncAgentJobProcessor jobProcessor,
         ILogger<SyncAgentConnectionService> logger)
     {
         _client = client;
+        _jobProcessor = jobProcessor;
         _logger = logger;
+        _jobProcessor.ProgressChanged += OnJobProgress;
     }
 
     public event Action<string>? LogLineAdded;
     public event Action<bool>? ConnectionStateChanged;
+    public event Action<string?>? ProgressChanged;
 
     public bool IsConnected => _loopCts is not null;
     public string? AccessToken => _accessToken;
     public DateTimeOffset? LastHeartbeatAt { get; private set; }
     public string StatusText { get; private set; } = "Отключено";
+    public string? CurrentProgress { get; private set; }
+    public bool IsBusy => _processingJob;
 
     public async Task ConnectAsync(
         string hubUrl,
@@ -85,6 +96,8 @@ public sealed class SyncAgentConnectionService : IAsyncDisposable
         _loopCts = null;
         _loopTask = null;
         _accessToken = null;
+        _activeJobId = null;
+        CurrentProgress = null;
 
         StatusText = "Отключено";
         ConnectionStateChanged?.Invoke(false);
@@ -101,8 +114,11 @@ public sealed class SyncAgentConnectionService : IAsyncDisposable
         {
             try
             {
-                await SendHeartbeatAsync(ct);
-                await PollJobsAsync(ct);
+                if (!_processingJob)
+                {
+                    await SendHeartbeatAsync("idle", null, null, ct);
+                    await PollJobsAsync(ct);
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -128,7 +144,11 @@ public sealed class SyncAgentConnectionService : IAsyncDisposable
         }
     }
 
-    private async Task SendHeartbeatAsync(CancellationToken ct)
+    private async Task SendHeartbeatAsync(
+        string status,
+        Guid? jobId,
+        string? progressMessage,
+        CancellationToken ct)
     {
         if (_hubUrl is null || _accessToken is null)
             return;
@@ -136,13 +156,16 @@ public sealed class SyncAgentConnectionService : IAsyncDisposable
         await _client.HeartbeatAsync(_hubUrl, _accessToken, new HeartbeatRequest
         {
             NodeId = _nodeId,
-            Status = "idle"
+            Status = status,
+            CurrentJobId = jobId,
+            ProgressMessage = progressMessage
         }, ct);
 
         LastHeartbeatAt = DateTimeOffset.Now;
-        StatusText = "Подключено";
+        StatusText = _processingJob ? "Выполнение задачи..." : "Подключено";
         ConnectionStateChanged?.Invoke(true);
-        AddLog($"Heartbeat {LastHeartbeatAt:HH:mm:ss}");
+        if (!_processingJob)
+            AddLog($"Heartbeat {LastHeartbeatAt:HH:mm:ss}");
     }
 
     private async Task PollJobsAsync(CancellationToken ct)
@@ -151,7 +174,140 @@ public sealed class SyncAgentConnectionService : IAsyncDisposable
             return;
 
         var response = await _client.PollJobsAsync(_hubUrl, _accessToken, _nodeId, ct);
-        AddLog(response.Job is null ? "Poll: job=null" : $"Poll: job={response.Job.JobId}");
+        if (response.Job is null)
+        {
+            AddLog("Poll: job=null");
+            return;
+        }
+
+        AddLog($"Poll: job={response.Job.JobId}");
+        _processingJob = true;
+        _activeJobId = response.Job.JobId;
+        _lastProgressMessage = null;
+        StatusText = "Выполнение задачи...";
+
+        using var heartbeatCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var periodicHeartbeat = RunPeriodicJobHeartbeatsAsync(heartbeatCts.Token);
+
+        try
+        {
+            await SendHeartbeatAsync(
+                "exporting",
+                response.Job.JobId,
+                "Передатчик получил задачу, подготовка выгрузки…",
+                ct);
+
+            await _jobProcessor.ProcessJobAsync(
+                _hubUrl,
+                _accessToken,
+                response.Job,
+                agentWorkRoot: null,
+                ct);
+
+            AddLog($"Job {response.Job.JobId} completed");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Job processing failed");
+            AddLog($"Job failed: {ex.Message}");
+            try
+            {
+                if (_hubUrl is not null && _accessToken is not null)
+                    await _client.FailJobAsync(_hubUrl, _accessToken, response.Job.JobId, ex.Message, ct);
+            }
+            catch (Exception failEx)
+            {
+                _logger.LogWarning(failEx, "Failed to report job failure to hub");
+            }
+        }
+        finally
+        {
+            heartbeatCts.Cancel();
+            try
+            {
+                await periodicHeartbeat;
+            }
+            catch (OperationCanceledException)
+            {
+                // expected
+            }
+
+            _processingJob = false;
+            _activeJobId = null;
+            CurrentProgress = null;
+            ProgressChanged?.Invoke(null);
+            StatusText = "Подключено";
+        }
+    }
+
+    private async Task RunPeriodicJobHeartbeatsAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+        while (await timer.WaitForNextTickAsync(ct))
+            await TrySendJobProgressHeartbeatAsync(force: true, ct);
+    }
+
+    private void OnJobProgress(JobProgressUpdate update)
+    {
+        CurrentProgress = update.Message;
+        ProgressChanged?.Invoke(update.Message);
+        if (update.WriteToJournal)
+            LogLineAdded?.Invoke(update.Message);
+        _lastProgressMessage = update.Message;
+        _ = TrySendJobProgressHeartbeatAsync(
+            force: update.WriteToJournal || IsPhaseChange(update.Message),
+            CancellationToken.None);
+    }
+
+    private async Task TrySendJobProgressHeartbeatAsync(bool force, CancellationToken ct)
+    {
+        if (_hubUrl is null || _accessToken is null || _activeJobId is null)
+            return;
+
+        var now = DateTimeOffset.UtcNow;
+        if (!force && now - _lastProgressHeartbeatUtc < TimeSpan.FromSeconds(5))
+            return;
+
+        _lastProgressHeartbeatUtc = now;
+        var status = InferAgentStatus(_lastProgressMessage);
+        var message = _lastProgressMessage ?? "Выполнение задачи на RDP…";
+
+        try
+        {
+            await SendHeartbeatAsync(status, _activeJobId, message, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "Progress heartbeat failed");
+        }
+    }
+
+    private static bool IsPhaseChange(string message)
+    {
+        if (ExportDirectoryMonitor.IsRoutineStatusMessage(message))
+            return false;
+
+        return message.Contains("DumpConfig", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("завершена", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("Упаковка", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("Загрузка zip", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("Finalize", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("Done:", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("Resume upload", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("Job ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string InferAgentStatus(string? message)
+    {
+        if (message is null)
+            return "exporting";
+
+        if (message.Contains("Upload", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("chunk", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("Finalize", StringComparison.OrdinalIgnoreCase))
+            return "uploading";
+
+        return "exporting";
     }
 
     private void AddLog(string line) => LogLineAdded?.Invoke(line);

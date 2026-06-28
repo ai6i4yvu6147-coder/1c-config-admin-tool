@@ -19,7 +19,9 @@ public sealed class SyncAgentViewModel : ObservableObject
     private string _statusText = "Отключено";
     private string _lastHeartbeatText = "—";
     private string _statusMessage = string.Empty;
+    private string _currentProgress = string.Empty;
     private bool _isBusy;
+    private bool _isProcessingJob;
     private bool _isConnected;
 
     public SyncAgentViewModel(
@@ -33,6 +35,7 @@ public sealed class SyncAgentViewModel : ObservableObject
 
         _connectionService.LogLineAdded += OnLogLineAdded;
         _connectionService.ConnectionStateChanged += OnConnectionStateChanged;
+        _connectionService.ProgressChanged += OnProgressChanged;
 
         ConnectCommand = new RelayCommand(ConnectAsync, CanConnect);
         DisconnectCommand = new RelayCommand(DisconnectAsync, () => IsConnected && !IsBusy);
@@ -82,6 +85,18 @@ public sealed class SyncAgentViewModel : ObservableObject
             SetProperty(ref _statusMessage, value);
             CommandManager.InvalidateRequerySuggested();
         }
+    }
+
+    public string CurrentProgress
+    {
+        get => _currentProgress;
+        set => SetProperty(ref _currentProgress, value);
+    }
+
+    public bool IsProcessingJob
+    {
+        get => _isProcessingJob;
+        set => SetProperty(ref _isProcessingJob, value);
     }
 
     public bool IsBusy
@@ -202,6 +217,15 @@ public sealed class SyncAgentViewModel : ObservableObject
             StatusText = _connectionService.StatusText;
             if (_connectionService.LastHeartbeatAt is { } heartbeat)
                 LastHeartbeatText = heartbeat.ToString("G");
+        });
+    }
+
+    private void OnProgressChanged(string? progress)
+    {
+        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            CurrentProgress = progress ?? string.Empty;
+            IsProcessingJob = !string.IsNullOrWhiteSpace(progress);
         });
     }
 

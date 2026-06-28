@@ -1,6 +1,8 @@
 using System.Windows.Input;
 using ConfigAdmin.Application.Hub;
+using ConfigAdmin.Application.RemoteSync;
 using ConfigAdmin.Application.Services;
+using ConfigAdmin.Domain.Enums;
 using ConfigAdmin.Domain.Models;
 using ConfigAdmin.Wpf.Services;
 
@@ -11,11 +13,14 @@ public sealed class ExportViewModel : ObservableObject
     private readonly ExportService _exportService;
     private readonly ProfileService _profileService;
     private readonly ConfigMcpSyncService _configMcpSyncService;
+    private readonly RemoteSyncOrchestrator _remoteSyncOrchestrator;
+    private readonly VaultSessionService _vaultSessionService;
     private readonly INavigationService _navigationService;
 
     private Guid _baseId;
     private string _baseDisplayName = string.Empty;
-    private bool _exportConfiguration;
+    private bool _isRemoteBase;
+    private bool _exportConfiguration = true;
     private bool _exportAllExtensions;
     private string _selectedExtensionsText = string.Empty;
     private bool _saveSettingsToProfile = true;
@@ -24,19 +29,25 @@ public sealed class ExportViewModel : ObservableObject
     private string _progressText = string.Empty;
     private string _statusMessage = string.Empty;
     private bool _isBusy;
+    private Guid? _activeJobId;
 
     public ExportViewModel(
         ExportService exportService,
         ProfileService profileService,
         ConfigMcpSyncService configMcpSyncService,
+        RemoteSyncOrchestrator remoteSyncOrchestrator,
+        VaultSessionService vaultSessionService,
         INavigationService navigationService)
     {
         _exportService = exportService;
         _profileService = profileService;
         _configMcpSyncService = configMcpSyncService;
+        _remoteSyncOrchestrator = remoteSyncOrchestrator;
+        _vaultSessionService = vaultSessionService;
         _navigationService = navigationService;
 
         ExportCommand = new RelayCommand(ExportAsync, CanExport);
+        RemoteSyncCommand = new RelayCommand(RemoteSyncAsync, CanRemoteSync);
         BackCommand = new RelayCommand(() => _navigationService.GoBack());
     }
 
@@ -45,6 +56,19 @@ public sealed class ExportViewModel : ObservableObject
         get => _baseDisplayName;
         private set => SetProperty(ref _baseDisplayName, value);
     }
+
+    public bool IsRemoteBase
+    {
+        get => _isRemoteBase;
+        private set
+        {
+            SetProperty(ref _isRemoteBase, value);
+            RaisePropertyChanged(nameof(IsLocalBase));
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
+    public bool IsLocalBase => !IsRemoteBase;
 
     public bool ExportConfiguration
     {
@@ -68,7 +92,7 @@ public sealed class ExportViewModel : ObservableObject
         set => SetProperty(ref _selectedExtensionsText, value);
     }
 
-    public bool IsSelectedExtensionsEnabled => !ExportAllExtensions;
+    public bool IsSelectedExtensionsEnabled => !ExportAllExtensions && IsLocalBase;
 
     public bool SaveSettingsToProfile
     {
@@ -113,6 +137,7 @@ public sealed class ExportViewModel : ObservableObject
     }
 
     public RelayCommand ExportCommand { get; }
+    public RelayCommand RemoteSyncCommand { get; }
     public RelayCommand BackCommand { get; }
 
     public async void Begin(Guid baseId, string displayName)
@@ -122,26 +147,33 @@ public sealed class ExportViewModel : ObservableObject
         ProgressText = string.Empty;
         StatusMessage = string.Empty;
         McpFollowUpText = string.Empty;
+        _activeJobId = null;
 
         var profile = await _profileService.GetInfobaseByIdAsync(baseId);
         if (profile is null)
         {
             StatusMessage = "База не найдена.";
             IsMcpSyncAvailable = false;
+            IsRemoteBase = false;
             RaisePropertyChanged(nameof(IsMcpSyncAvailable));
             return;
         }
 
+        IsRemoteBase = profile.ExportLocation == ExportLocation.Remote;
         IsMcpSyncAvailable = profile.ConfigMcpProjectId is Guid id && id != Guid.Empty;
         SyncToMcpAfterExport = IsMcpSyncAvailable;
         RaisePropertyChanged(nameof(IsMcpSyncAvailable));
+        RaisePropertyChanged(nameof(IsSelectedExtensionsEnabled));
 
         ExportConfiguration = profile.ExportConfiguration;
         ExportAllExtensions = profile.ExportAllExtensions;
         SelectedExtensionsText = string.Join(Environment.NewLine, profile.SelectedExtensions);
     }
 
-    private bool CanExport() => !IsBusy && BuildPlan().HasWork;
+    private bool CanExport() => !IsBusy && IsLocalBase && BuildPlan().HasWork;
+
+    private bool CanRemoteSync() =>
+        !IsBusy && IsRemoteBase && ExportConfiguration && _vaultSessionService.IsUnlocked;
 
     private ExportPlan BuildPlan()
     {
@@ -156,6 +188,155 @@ public sealed class ExportViewModel : ObservableObject
             SelectedExtensions = ExportAllExtensions ? [] : extensions
         };
     }
+
+    private async Task RemoteSyncAsync()
+    {
+        if (!_vaultSessionService.IsUnlocked)
+        {
+            StatusMessage = "Разблокируйте vault перед синхронизацией с RDP.";
+            return;
+        }
+
+        if (!ExportConfiguration)
+        {
+            StatusMessage = "Включите выгрузку основной конфигурации.";
+            return;
+        }
+
+        IsBusy = true;
+        StatusMessage = "Создание задачи sync...";
+        ProgressText = string.Empty;
+
+        try
+        {
+            if (SaveSettingsToProfile)
+                await SaveProfileSettingsAsync(BuildPlan());
+
+            var job = await _remoteSyncOrchestrator.RequestSyncAsync(
+                _baseId,
+                SyncToMcpAfterExport && IsMcpSyncAvailable);
+            _activeJobId = job.Id;
+            StatusMessage = "Задача создана, ожидание Передатчика на RDP…";
+
+            await PollJobUntilDoneAsync(job.Id);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = ex.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+            _activeJobId = null;
+        }
+    }
+
+    private async Task PollJobUntilDoneAsync(Guid jobId)
+    {
+        while (true)
+        {
+            var job = await _remoteSyncOrchestrator.GetJobAsync(jobId);
+            if (job is null)
+            {
+                StatusMessage = "Задача не найдена.";
+                return;
+            }
+
+            var progress = _remoteSyncOrchestrator.GetJobProgress(jobId);
+            StatusMessage = FormatRemoteSyncStatus(job, progress);
+            ProgressText = FormatRemoteSyncProgress(job, progress);
+
+            if (job.Status == SyncJobStatus.Completed)
+            {
+                StatusMessage = "Синхронизация с RDP завершена.";
+                ProgressText = progress?.Message ?? ProgressText;
+                if (job.SyncMcpAfterComplete && IsMcpSyncAvailable)
+                    McpFollowUpText = "MCP sync выполнен на Hub после доставки (если receiver был активен).";
+                return;
+            }
+
+            if (job.Status is SyncJobStatus.Failed or SyncJobStatus.Cancelled)
+            {
+                StatusMessage = job.ErrorMessage ?? $"Задача завершилась: {FormatStatusLabel(job.Status)}";
+                return;
+            }
+
+            await Task.Delay(1500);
+        }
+    }
+
+    private static string FormatRemoteSyncStatus(
+        SyncJobProfile job,
+        SyncJobProgressStore.JobProgressEntry? progress)
+    {
+        if (!string.IsNullOrWhiteSpace(progress?.Message))
+            return progress.Message;
+
+        return job.Status switch
+        {
+            SyncJobStatus.Pending => "Задача в очереди, ожидание опроса Передатчиком…",
+            SyncJobStatus.Claimed => "Передатчик получил задачу, подготовка…",
+            SyncJobStatus.Exporting => "Выгрузка конфигурации 1С на RDP (может занять много времени)…",
+            SyncJobStatus.Uploading => "Передача zip на Hub…",
+            SyncJobStatus.Applying => "Применение в локальный ExportRoot…",
+            _ => FormatStatusLabel(job.Status)
+        };
+    }
+
+    private static string FormatRemoteSyncProgress(
+        SyncJobProfile job,
+        SyncJobProgressStore.JobProgressEntry? progress)
+    {
+        var parts = new List<string> { FormatStatusLabel(job.Status) };
+
+        if (job.StartedAt is not null)
+        {
+            var elapsed = DateTimeOffset.Now - job.StartedAt.Value.ToLocalTime();
+            parts.Add($"прошло {FormatElapsed(elapsed)}");
+        }
+
+        if (progress is not null)
+            parts.Add($"обновлено {progress.UpdatedAt.ToLocalTime():HH:mm:ss}");
+
+        if (job.BytesTotal > 0)
+        {
+            var pct = job.BytesTotal == 0 ? 0 : (int)(job.BytesReceived * 100 / job.BytesTotal);
+            parts.Add($"передано {FormatBytes(job.BytesReceived)}/{FormatBytes(job.BytesTotal)} ({pct}%)");
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    private static string FormatStatusLabel(SyncJobStatus status) => status switch
+    {
+        SyncJobStatus.Pending => "Ожидание",
+        SyncJobStatus.Claimed => "Получено передатчиком",
+        SyncJobStatus.Exporting => "Выгрузка 1С на RDP",
+        SyncJobStatus.Uploading => "Загрузка на Hub",
+        SyncJobStatus.Applying => "Применение",
+        SyncJobStatus.Completed => "Завершено",
+        SyncJobStatus.Failed => "Ошибка",
+        SyncJobStatus.Cancelled => "Отменено",
+        _ => status.ToString()
+    };
+
+    private static string FormatElapsed(TimeSpan elapsed)
+    {
+        if (elapsed.TotalHours >= 1)
+            return $"{(int)elapsed.TotalHours} ч {elapsed.Minutes} мин";
+        if (elapsed.TotalMinutes >= 1)
+            return $"{(int)elapsed.TotalMinutes} мин";
+        return $"{(int)elapsed.TotalSeconds} сек";
+    }
+
+    private static string FormatBytes(long bytes) =>
+        bytes switch
+        {
+            < 1024 => $"{bytes} B",
+            < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
+            < 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024):F1} MB",
+            _ => $"{bytes / (1024.0 * 1024 * 1024):F1} GB"
+        };
 
     private async Task ExportAsync()
     {
@@ -247,7 +428,10 @@ public sealed class ExportViewModel : ObservableObject
             plan.ExportConfiguration,
             plan.ExportAllExtensions,
             plan.SelectedExtensions,
-            profile.ExportFormat);
+            profile.ExportFormat,
+            profile.ExportLocation,
+            profile.RemoteNodeId,
+            profile.RemoteExportPath);
     }
 
     private async Task TrySyncToMcpAsync()
@@ -256,13 +440,9 @@ public sealed class ExportViewModel : ObservableObject
         {
             var syncResult = await _configMcpSyncService.SyncInfobaseAsync(_baseId);
             if (syncResult.Success)
-            {
                 StatusMessage += " Синхронизация с config-mcp выполнена.";
-            }
             else
-            {
                 StatusMessage += $" Синхронизация с config-mcp не выполнена: {syncResult.Message}";
-            }
 
             if (syncResult.FollowUpHints.Count > 0)
             {

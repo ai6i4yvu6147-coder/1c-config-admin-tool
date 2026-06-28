@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text.Json;
+using ConfigAdmin.Application.Hub;
 using ConfigAdmin.Domain.RemoteSync;
+using ConfigAdmin.Domain.Repositories;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -70,10 +72,23 @@ public sealed class SyncReceiverHost : IAsyncDisposable
 
     private static void MapEndpoints(WebApplication app, IServiceProvider rootServices)
     {
-        app.MapPost("/api/sync-agent/register", (Func<HttpContext, Task<IResult>>)(ctx => RegisterAsync(ctx, rootServices)));
-        app.MapPost("/api/sync-agent/heartbeat", (Func<HttpContext, Task<IResult>>)(ctx => HeartbeatAsync(ctx, rootServices)));
-        app.MapGet("/api/sync-agent/jobs", (Func<HttpContext, Guid, Task<IResult>>)((ctx, nodeId) => PollJobsAsync(ctx, nodeId, rootServices)));
+        app.MapPost("/api/sync-agent/register", (Delegate)(async (HttpContext ctx) => await RegisterAsync(ctx, rootServices)));
+        app.MapPost("/api/sync-agent/heartbeat", (Delegate)(async (HttpContext ctx) => await HeartbeatAsync(ctx, rootServices)));
+        app.MapGet("/api/sync-agent/jobs", (Delegate)(async (HttpContext ctx, Guid nodeId) => await PollJobsAsync(ctx, nodeId, rootServices)));
+        app.MapPost("/api/sync-agent/jobs/{jobId:guid}/fail", (Delegate)(async (HttpContext ctx, Guid jobId) =>
+            await FailJobAsync(ctx, jobId, rootServices)));
+
+        app.MapPost("/api/sync-upload/sessions", (Delegate)(async (HttpContext ctx) => await CreateUploadSessionAsync(ctx, rootServices)));
+        app.MapPut("/api/sync-upload/sessions/{sessionId:guid}/chunks/{chunkIndex:int}", CreateUploadChunkHandler(rootServices));
+        app.MapGet("/api/sync-upload/sessions/{sessionId:guid}", (Delegate)(async (HttpContext ctx, Guid sessionId) =>
+            await GetUploadSessionAsync(ctx, sessionId, rootServices)));
+        app.MapPost("/api/sync-upload/sessions/{sessionId:guid}/complete", (Delegate)(async (HttpContext ctx, Guid sessionId) =>
+            await CompleteUploadAsync(ctx, sessionId, rootServices)));
     }
+
+    private static Delegate CreateUploadChunkHandler(IServiceProvider rootServices) =>
+        async (HttpContext ctx, Guid sessionId, int chunkIndex) =>
+            await PutChunkAsync(ctx, sessionId, chunkIndex, rootServices);
 
     private static async Task<IResult> RegisterAsync(HttpContext context, IServiceProvider rootServices)
     {
@@ -138,6 +153,130 @@ public sealed class SyncReceiverHost : IAsyncDisposable
             return Error(HttpStatusCode.Unauthorized, "Invalid or expired token.", "AUTH_FAILED");
 
         return Results.Json(response, JsonOptions);
+    }
+
+    private static async Task<IResult> FailJobAsync(HttpContext context, Guid jobId, IServiceProvider rootServices)
+    {
+        if (!TryGetBearerToken(context, out var token))
+            return Error(HttpStatusCode.Unauthorized, "Missing bearer token.", "AUTH_REQUIRED");
+
+        FailJobRequest? request = null;
+        try
+        {
+            request = await context.Request.ReadFromJsonAsync<FailJobRequest>(JsonOptions, context.RequestAborted);
+        }
+        catch (JsonException)
+        {
+            // optional body
+        }
+
+        var hubService = rootServices.GetRequiredService<SyncAgentHubService>();
+        var ok = await hubService.FailJobAsync(
+            token,
+            jobId,
+            request?.ErrorMessage ?? "Job failed on agent.",
+            context.RequestAborted);
+        if (!ok)
+            return Error(HttpStatusCode.BadRequest, "Unable to fail job.", "JOB_FAIL");
+
+        return Results.Ok();
+    }
+
+    private static async Task<IResult> CreateUploadSessionAsync(HttpContext context, IServiceProvider rootServices)
+    {
+        if (!TryGetBearerToken(context, out var token))
+            return Error(HttpStatusCode.Unauthorized, "Missing bearer token.", "AUTH_REQUIRED");
+
+        CreateUploadSessionRequest? request;
+        try
+        {
+            request = await context.Request.ReadFromJsonAsync<CreateUploadSessionRequest>(JsonOptions, context.RequestAborted);
+        }
+        catch (JsonException)
+        {
+            return Error(HttpStatusCode.BadRequest, "Invalid JSON body.", "INVALID_JSON");
+        }
+
+        if (request is null || request.JobId == Guid.Empty)
+            return Error(HttpStatusCode.BadRequest, "jobId is required.", "INVALID_REQUEST");
+
+        var uploadService = rootServices.GetRequiredService<SyncUploadHubService>();
+        var response = await uploadService.CreateSessionAsync(token, request, context.RequestAborted);
+        if (response is null)
+            return Error(HttpStatusCode.Unauthorized, "Invalid token or job.", "AUTH_FAILED");
+
+        return Results.Json(response, JsonOptions, statusCode: StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> PutChunkAsync(
+        HttpContext context,
+        Guid sessionId,
+        int chunkIndex,
+        IServiceProvider rootServices)
+    {
+        if (!TryGetBearerToken(context, out var token))
+            return Error(HttpStatusCode.Unauthorized, "Missing bearer token.", "AUTH_REQUIRED");
+
+        var uploadService = rootServices.GetRequiredService<SyncUploadHubService>();
+        var response = await uploadService.PutChunkAsync(
+            token, sessionId, chunkIndex, context.Request.Body, context.RequestAborted);
+        if (response is null)
+            return Error(HttpStatusCode.BadRequest, "Invalid session or token.", "CHUNK_REJECTED");
+
+        return Results.Json(response, JsonOptions);
+    }
+
+    private static async Task<IResult> GetUploadSessionAsync(
+        HttpContext context,
+        Guid sessionId,
+        IServiceProvider rootServices)
+    {
+        if (!TryGetBearerToken(context, out var token))
+            return Error(HttpStatusCode.Unauthorized, "Missing bearer token.", "AUTH_REQUIRED");
+
+        var uploadService = rootServices.GetRequiredService<SyncUploadHubService>();
+        var response = await uploadService.GetSessionAsync(token, sessionId, context.RequestAborted);
+        if (response is null)
+            return Error(HttpStatusCode.Gone, "Session not found or expired.", "SESSION_EXPIRED");
+
+        return Results.Json(response, JsonOptions);
+    }
+
+    private static async Task<IResult> CompleteUploadAsync(
+        HttpContext context,
+        Guid sessionId,
+        IServiceProvider rootServices)
+    {
+        if (!TryGetBearerToken(context, out var token))
+            return Error(HttpStatusCode.Unauthorized, "Missing bearer token.", "AUTH_REQUIRED");
+
+        if (await rootServices.GetRequiredService<SyncAgentHubService>().ValidateTokenAsync(token, context.RequestAborted) is null)
+            return Error(HttpStatusCode.Unauthorized, "Invalid or expired token.", "AUTH_FAILED");
+
+        try
+        {
+            var sessionStore = rootServices.GetRequiredService<SyncUploadSessionStore>();
+            var meta = sessionStore.GetSession(sessionId);
+            if (meta is null)
+                return Error(HttpStatusCode.Gone, "Session not found or expired.", "SESSION_EXPIRED");
+
+            var completer = rootServices.GetRequiredService<SyncUploadCompleter>();
+            var result = await completer.CompleteAsync(sessionId, context.RequestAborted);
+
+            var jobRepo = rootServices.GetRequiredService<ISyncJobRepository>();
+            var job = await jobRepo.GetByIdAsync(meta.JobId, context.RequestAborted);
+            if (job?.SyncMcpAfterComplete == true)
+            {
+                var mcp = rootServices.GetRequiredService<ConfigMcpSyncService>();
+                _ = await mcp.SyncInfobaseAsync(job.InfobaseId, context.RequestAborted);
+            }
+
+            return Results.Json(result, JsonOptions);
+        }
+        catch (SyncUploadException ex)
+        {
+            return Error((HttpStatusCode)ex.StatusCode, ex.Message, ex.Code);
+        }
     }
 
     private static bool TryGetBearerToken(HttpContext context, out string token)

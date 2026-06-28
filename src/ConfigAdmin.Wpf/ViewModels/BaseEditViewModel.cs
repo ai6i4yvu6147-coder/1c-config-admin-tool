@@ -1,7 +1,10 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
+using ConfigAdmin.Application.RemoteSync;
 using ConfigAdmin.Application.Services;
 using ConfigAdmin.Domain.Enums;
+using ConfigAdmin.Domain.Models;
+using ConfigAdmin.Domain.Services;
 using ConfigAdmin.Wpf.Services;
 
 namespace ConfigAdmin.Wpf.ViewModels;
@@ -12,6 +15,8 @@ public sealed class BaseEditViewModel : ObservableObject
     private readonly ConnectionTestService _connectionTestService;
     private readonly FileDialogService _fileDialogService;
     private readonly INavigationService _navigationService;
+    private readonly RemoteNodeService _remoteNodeService;
+    private readonly IExportPathBuilder _exportPathBuilder;
 
     private Guid? _editingId;
     private string _selectedClient = string.Empty;
@@ -21,23 +26,33 @@ public sealed class BaseEditViewModel : ObservableObject
     private string _connectionString = string.Empty;
     private string _username = string.Empty;
     private string _password = string.Empty;
-    private bool _exportConfiguration;
+    private bool _exportConfiguration = true;
     private bool _exportAllExtensions;
     private string _selectedExtensionsText = string.Empty;
+    private bool _isLocalExport = true;
+    private Guid? _selectedRemoteNodeId;
+    private string _remoteExportPath = string.Empty;
+    private string _localTargetHint = string.Empty;
     private string _statusMessage = string.Empty;
 
     public BaseEditViewModel(
         ProfileService profileService,
         ConnectionTestService connectionTestService,
         FileDialogService fileDialogService,
-        INavigationService navigationService)
+        INavigationService navigationService,
+        RemoteNodeService remoteNodeService,
+        IExportPathBuilder exportPathBuilder)
     {
         _profileService = profileService;
         _connectionTestService = connectionTestService;
         _fileDialogService = fileDialogService;
         _navigationService = navigationService;
+        _remoteNodeService = remoteNodeService;
+        _exportPathBuilder = exportPathBuilder;
 
         Clients = new ObservableCollection<string>();
+        RemoteNodes = new ObservableCollection<RemoteNodeOption>();
+
         SaveCommand = new RelayCommand(SaveAsync);
         TestConnectionCommand = new RelayCommand(TestConnectionAsync);
         BrowsePlatformCommand = new RelayCommand(BrowsePlatform);
@@ -46,17 +61,26 @@ public sealed class BaseEditViewModel : ObservableObject
     }
 
     public ObservableCollection<string> Clients { get; }
+    public ObservableCollection<RemoteNodeOption> RemoteNodes { get; }
 
     public string SelectedClient
     {
         get => _selectedClient;
-        set => SetProperty(ref _selectedClient, value);
+        set
+        {
+            SetProperty(ref _selectedClient, value);
+            _ = LoadRemoteNodesForClientAsync();
+        }
     }
 
     public string Name
     {
         get => _name;
-        set => SetProperty(ref _name, value);
+        set
+        {
+            SetProperty(ref _name, value);
+            UpdateLocalTargetHint();
+        }
     }
 
     public string PlatformPath
@@ -113,6 +137,40 @@ public sealed class BaseEditViewModel : ObservableObject
 
     public bool IsSelectedExtensionsEnabled => !ExportAllExtensions;
 
+    public bool IsLocalExport
+    {
+        get => _isLocalExport;
+        set
+        {
+            SetProperty(ref _isLocalExport, value);
+            RaisePropertyChanged(nameof(IsRemoteExport));
+        }
+    }
+
+    public bool IsRemoteExport
+    {
+        get => !IsLocalExport;
+        set => IsLocalExport = !value;
+    }
+
+    public Guid? SelectedRemoteNodeId
+    {
+        get => _selectedRemoteNodeId;
+        set => SetProperty(ref _selectedRemoteNodeId, value);
+    }
+
+    public string RemoteExportPath
+    {
+        get => _remoteExportPath;
+        set => SetProperty(ref _remoteExportPath, value);
+    }
+
+    public string LocalTargetHint
+    {
+        get => _localTargetHint;
+        set => SetProperty(ref _localTargetHint, value);
+    }
+
     public string StatusMessage
     {
         get => _statusMessage;
@@ -159,6 +217,11 @@ public sealed class BaseEditViewModel : ObservableObject
         ExportConfiguration = profile.ExportConfiguration;
         ExportAllExtensions = profile.ExportAllExtensions;
         SelectedExtensionsText = string.Join(Environment.NewLine, profile.SelectedExtensions);
+        IsLocalExport = profile.ExportLocation == ExportLocation.Local;
+        SelectedRemoteNodeId = profile.RemoteNodeId;
+        RemoteExportPath = profile.RemoteExportPath ?? string.Empty;
+        await LoadRemoteNodesForClientAsync();
+        UpdateLocalTargetHint();
         StatusMessage = string.Empty;
         RaisePropertyChanged(nameof(Title));
     }
@@ -173,6 +236,36 @@ public sealed class BaseEditViewModel : ObservableObject
             SelectedClient = Clients[0];
     }
 
+    private async Task LoadRemoteNodesForClientAsync()
+    {
+        RemoteNodes.Clear();
+        var clients = await _profileService.GetClientsAsync();
+        var client = clients.FirstOrDefault(c => c.Name == SelectedClient);
+        if (client is null)
+            return;
+
+        var nodes = await _remoteNodeService.GetAllAsync();
+        foreach (var node in nodes.Where(n => n.ClientId == client.Id && n.Enabled))
+            RemoteNodes.Add(new RemoteNodeOption(node.Id, node.Name));
+
+        if (SelectedRemoteNodeId is null && RemoteNodes.Count > 0)
+            SelectedRemoteNodeId = RemoteNodes[0].Id;
+    }
+
+    private async void UpdateLocalTargetHint()
+    {
+        var clients = await _profileService.GetClientsAsync();
+        var client = clients.FirstOrDefault(c => c.Name == SelectedClient);
+        if (client is null || string.IsNullOrWhiteSpace(Name))
+        {
+            LocalTargetHint = string.Empty;
+            return;
+        }
+
+        LocalTargetHint = _exportPathBuilder.GetConfigurationPath(
+            client.ExportRootPath, client.Name, Name);
+    }
+
     private void ResetFields()
     {
         Name = string.Empty;
@@ -181,9 +274,13 @@ public sealed class BaseEditViewModel : ObservableObject
         ConnectionString = string.Empty;
         Username = string.Empty;
         Password = string.Empty;
-        ExportConfiguration = false;
+        ExportConfiguration = true;
         ExportAllExtensions = false;
         SelectedExtensionsText = string.Empty;
+        IsLocalExport = true;
+        SelectedRemoteNodeId = null;
+        RemoteExportPath = string.Empty;
+        LocalTargetHint = string.Empty;
         StatusMessage = string.Empty;
     }
 
@@ -201,6 +298,9 @@ public sealed class BaseEditViewModel : ObservableObject
 
     private bool ValidateExportSettings()
     {
+        if (IsRemoteExport)
+            return ExportConfiguration;
+
         if (ExportConfiguration || ExportAllExtensions)
             return true;
 
@@ -228,7 +328,15 @@ public sealed class BaseEditViewModel : ObservableObject
 
             if (!ValidateExportSettings())
             {
-                StatusMessage = "Укажите что выгружать: конфигурацию, все расширения или список расширений.";
+                StatusMessage = IsRemoteExport
+                    ? "Для Remote sync включите выгрузку основной конфигурации."
+                    : "Укажите что выгружать: конфигурацию, все расширения или список расширений.";
+                return;
+            }
+
+            if (IsRemoteExport && SelectedRemoteNodeId is null)
+            {
+                StatusMessage = "Выберите RDP-узел.";
                 return;
             }
 
@@ -241,8 +349,13 @@ public sealed class BaseEditViewModel : ObservableObject
                 Username,
                 string.IsNullOrWhiteSpace(Password) ? null : Password,
                 ExportConfiguration,
-                ExportAllExtensions,
-                ParseExtensions());
+                IsRemoteExport ? false : ExportAllExtensions,
+                IsRemoteExport ? [] : ParseExtensions(),
+                exportLocation: IsRemoteExport ? ExportLocation.Remote : ExportLocation.Local,
+                remoteNodeId: IsRemoteExport ? SelectedRemoteNodeId : null,
+                remoteExportPath: IsRemoteExport && !string.IsNullOrWhiteSpace(RemoteExportPath)
+                    ? RemoteExportPath
+                    : null);
 
             _navigationService.GoBack();
         }
@@ -286,5 +399,10 @@ public sealed class BaseEditViewModel : ObservableObject
         {
             StatusMessage = ex.Message;
         }
+    }
+
+    public sealed record RemoteNodeOption(Guid Id, string Name)
+    {
+        public override string ToString() => Name;
     }
 }

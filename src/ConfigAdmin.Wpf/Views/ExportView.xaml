@@ -28,17 +28,30 @@
                       Margin="0,0,0,16" />
 
             <TextBlock Text="{Binding ProgressText}" TextWrapping="Wrap" Margin="0,0,0,8" />
+            <ProgressBar Height="8" Margin="0,0,0,8"
+                         IsIndeterminate="{Binding IsBusy}"
+                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}" />
             <TextBlock Text="{Binding StatusMessage}" Foreground="Firebrick" TextWrapping="Wrap" Margin="0,0,0,8" />
             <TextBlock Text="{Binding McpFollowUpText}" TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,16" />
 
             <StackPanel Orientation="Horizontal">
-                <Button Content="Выгрузить" Command="{Binding ExportCommand}" Padding="12,6" Margin="0,0,8,0"
-                        IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                <Button Content="Выгрузить"
+                        Command="{Binding ExportCommand}"
+                        Padding="12,6" Margin="0,0,8,0"
+                        Visibility="{Binding IsLocalBase, Converter={StaticResource BoolToVisibility}}" />
+                <Button Content="Выгрузить и синхронизировать с RDP"
+                        Command="{Binding RemoteSyncCommand}"
+                        Padding="12,6" Margin="0,0,8,0"
+                        Visibility="{Binding IsRemoteBase, Converter={StaticResource BoolToVisibility}}" />
                 <Button Content="Назад" Command="{Binding BackCommand}" Padding="12,6" />
             </StackPanel>
 
             <TextBlock Margin="0,16,0,0" TextWrapping="Wrap" Foreground="Gray"
-                       Text="Расширение: {каталог базы}\{имя расширения}. Конфигурация: {каталог базы}\Основная конфигурация. При выгрузке только расширений папка конфигурации не затрагивается." />
+                       Visibility="{Binding IsLocalBase, Converter={StaticResource BoolToVisibility}}"
+                       Text="Расширение: {каталог базы}\{имя расширения}. Конфигурация: {каталог базы}\Основная конфигурация." />
+            <TextBlock Margin="0,16,0,0" TextWrapping="Wrap" Foreground="Gray"
+                       Visibility="{Binding IsRemoteBase, Converter={StaticResource BoolToVisibility}}"
+                       Text="Remote: Передатчик на RDP выполнит выгрузку 1С и отправит файлы на этот Hub. Vault должен быть разблокирован." />
         </StackPanel>
     </ScrollViewer>
 </UserControl>

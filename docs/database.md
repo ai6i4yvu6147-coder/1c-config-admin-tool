@@ -25,7 +25,7 @@
 | `clients` | Клиент: id, name, comment, export_root_path |
 | `projects` | Hub-проект: id, client_id, name, active |
 | `tool_instances` | Managed tool: module_id (unique), root_path, enabled |
-| `infobases` | База 1С: подключение, platform_path, план выгрузки, last_export_*, project_id, config_mcp_project_id |
+| `infobases` | База 1С: подключение, platform_path, план выгрузки, last_export_*, project_id, config_mcp_project_id (R1; **целевое:** `config_mcp_project_id` на `clients`) |
 | `export_runs` | Журнал запусков выгрузки (включая meta_json_path) |
 | `vault_meta` | Salt и verifier мастер-пароля (не сам пароль) |
 | `remote_nodes` | RDP-узел: pairing verifier, hub URL, last_seen, enabled |
@@ -34,6 +34,8 @@
 `sync_jobs` и поля Remote на `infobases` — **запланированы**, см. [`remote-sync/status.md`](remote-sync/status.md).
 
 `tool_instances` seed при первом открытии экрана MCP: `module_id=1c-config-mcp`, `root_path=C:\1c_config_mcp_server_Portable`.
+
+Согласованный mapping Hub ↔ config-mcp (`project`, `database`, fragment): [`admin-hub/registry-mapping.md`](admin-hub/registry-mapping.md).
 
 Код: `src/ConfigAdmin.Infrastructure/Data/DatabaseInitializer.cs`, репозитории в `Infrastructure/Repositories/`.
 

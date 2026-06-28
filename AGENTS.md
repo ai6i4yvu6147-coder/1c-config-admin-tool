@@ -6,6 +6,8 @@
 - оглавление: [`docs/README.md`](docs/README.md)
 - backlog: [`docs/todo.md`](docs/todo.md)
 - Admin Hub (этот репозиторий = Hub + config-admin): [`docs/admin-hub/integration.md`](docs/admin-hub/integration.md)
+- mapping Hub ↔ config-mcp (agreed): [`docs/admin-hub/registry-mapping.md`](docs/admin-hub/registry-mapping.md)
+- целевая модель данных: [`docs/domain-model.md`](docs/domain-model.md)
 - протокол экосистемы: `docs/admin-hub/protocol-v1.md` + addendum v1.0.1 + v1.0.2
 
 При изменениях схемы SQLite — **NO_DB_MIGRATIONS**: не писать миграции существующих `configadmin.db`. См. [`docs/database.md`](docs/database.md) и [`.cursor/rules/no-db-migrations.md`](.cursor/rules/no-db-migrations.md).
