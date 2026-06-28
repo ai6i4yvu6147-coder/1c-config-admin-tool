@@ -1,0 +1,35 @@
+<UserControl x:Class="ConfigAdmin.Wpf.Views.HubModeSelectorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel MaxWidth="520" VerticalAlignment="Center">
+        <TextBlock Text="ConfigAdmin" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,8" />
+        <TextBlock Text="Выберите режим работы на этом компьютере"
+                   TextWrapping="Wrap"
+                   Foreground="Gray"
+                   Margin="0,0,0,20" />
+
+        <TextBlock Text="URL приёмника Hub (только для режима Админка)" />
+        <TextBox Text="{Binding HubListenUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,12" />
+        <TextBlock Text="На RDP укажите этот URL с Tailscale-IP вместо 0.0.0.0. Порт 443 — если клиент блокирует нестандартные порты."
+                   TextWrapping="Wrap"
+                   Foreground="Gray"
+                   Margin="0,0,0,16" />
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+            <Button Content="Админка (Hub)"
+                    Command="{Binding SelectHubCommand}"
+                    Padding="16,8"
+                    Margin="0,0,12,0"
+                    FontWeight="SemiBold" />
+            <Button Content="Передатчик (RDP)"
+                    Command="{Binding SelectAgentCommand}"
+                    Padding="16,8" />
+        </StackPanel>
+
+        <CheckBox Content="Запомнить режим на этом компьютере"
+                  IsChecked="{Binding RememberMode}"
+                  Margin="0,0,0,12" />
+
+        <TextBlock Text="{Binding StatusMessage}" Foreground="Firebrick" TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>

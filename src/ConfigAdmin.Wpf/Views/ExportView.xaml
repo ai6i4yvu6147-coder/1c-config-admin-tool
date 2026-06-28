@@ -20,10 +20,16 @@
                      IsEnabled="{Binding IsSelectedExtensionsEnabled}" />
 
             <CheckBox Content="Сохранить эти настройки в профиле базы"
-                      IsChecked="{Binding SaveSettingsToProfile}" Margin="0,0,0,16" />
+                      IsChecked="{Binding SaveSettingsToProfile}" Margin="0,0,0,8" />
+
+            <CheckBox Content="Синхронизировать с config-mcp после выгрузки конфигурации"
+                      IsChecked="{Binding SyncToMcpAfterExport}"
+                      IsEnabled="{Binding IsMcpSyncAvailable}"
+                      Margin="0,0,0,16" />
 
             <TextBlock Text="{Binding ProgressText}" TextWrapping="Wrap" Margin="0,0,0,8" />
-            <TextBlock Text="{Binding StatusMessage}" Foreground="Firebrick" TextWrapping="Wrap" Margin="0,0,0,16" />
+            <TextBlock Text="{Binding StatusMessage}" Foreground="Firebrick" TextWrapping="Wrap" Margin="0,0,0,8" />
+            <TextBlock Text="{Binding McpFollowUpText}" TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,16" />
 
             <StackPanel Orientation="Horizontal">
                 <Button Content="Выгрузить" Command="{Binding ExportCommand}" Padding="12,6" Margin="0,0,8,0"

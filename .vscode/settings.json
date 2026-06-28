@@ -1,0 +1,14 @@
+{
+  "dotnet.defaultSolution": "ConfigAdmin.sln",
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true
+  },
+  "search.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/dist": true
+  },
+  "editor.formatOnSave": true,
+  "omnisharp.enableRoslynAnalyzers": true
+}

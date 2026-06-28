@@ -17,3 +17,4 @@ echo === All single-file builds completed ===
 echo   dist\console-single\configadmin.exe
 echo   dist\wpf-single\ConfigAdmin.exe
 echo.
+pause

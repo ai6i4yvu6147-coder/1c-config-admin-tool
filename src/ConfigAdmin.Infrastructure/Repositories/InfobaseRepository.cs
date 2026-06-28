@@ -64,11 +64,13 @@ public sealed class InfobaseRepository : IInfobaseRepository
             INSERT INTO infobases (
               id, client_id, name, platform_path, connection_type, connection_string,
               username, encrypted_password, export_configuration, export_all_extensions,
-              selected_extensions_json, export_format, last_export_at, last_export_status
+              selected_extensions_json, export_format, last_export_at, last_export_status,
+              project_id, config_mcp_project_id
             ) VALUES (
               @Id, @ClientId, @Name, @PlatformPath, @ConnectionType, @ConnectionString,
               @Username, @EncryptedPassword, @ExportConfiguration, @ExportAllExtensions,
-              @SelectedExtensionsJson, @ExportFormat, @LastExportAt, @LastExportStatus
+              @SelectedExtensionsJson, @ExportFormat, @LastExportAt, @LastExportStatus,
+              @ProjectId, @ConfigMcpProjectId
             )
             ON CONFLICT(id) DO UPDATE SET
               client_id = excluded.client_id,
@@ -83,7 +85,9 @@ public sealed class InfobaseRepository : IInfobaseRepository
               selected_extensions_json = excluded.selected_extensions_json,
               export_format = excluded.export_format,
               last_export_at = excluded.last_export_at,
-              last_export_status = excluded.last_export_status
+              last_export_status = excluded.last_export_status,
+              project_id = excluded.project_id,
+              config_mcp_project_id = excluded.config_mcp_project_id
             """;
 
         await connection.ExecuteAsync(new CommandDefinition(sql, new
@@ -101,7 +105,9 @@ public sealed class InfobaseRepository : IInfobaseRepository
             SelectedExtensionsJson = JsonSerializer.Serialize(profile.SelectedExtensions),
             ExportFormat = (int)profile.ExportFormat,
             LastExportAt = profile.LastExportAt?.ToString("O"),
-            LastExportStatus = (int)profile.LastExportStatus
+            LastExportStatus = (int)profile.LastExportStatus,
+            ProjectId = profile.ProjectId?.ToString(),
+            ConfigMcpProjectId = profile.ConfigMcpProjectId?.ToString()
         }, cancellationToken: ct));
     }
 
@@ -155,8 +161,13 @@ public sealed class InfobaseRepository : IInfobaseRepository
         LastExportAt = string.IsNullOrWhiteSpace(row.last_export_at)
             ? null
             : DateTimeOffset.Parse(row.last_export_at),
-        LastExportStatus = (ExportStatus)(row.last_export_status ?? 0)
+        LastExportStatus = (ExportStatus)(row.last_export_status ?? 0),
+        ProjectId = ParseNullableGuid(row.project_id),
+        ConfigMcpProjectId = ParseNullableGuid(row.config_mcp_project_id)
     };
+
+    private static Guid? ParseNullableGuid(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : Guid.Parse(value);
 
     private sealed class InfobaseRow
     {
@@ -174,5 +185,7 @@ public sealed class InfobaseRepository : IInfobaseRepository
         public int export_format { get; set; }
         public string? last_export_at { get; set; }
         public int? last_export_status { get; set; }
+        public string? project_id { get; set; }
+        public string? config_mcp_project_id { get; set; }
     }
 }

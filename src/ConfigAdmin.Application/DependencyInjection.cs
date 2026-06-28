@@ -1,5 +1,6 @@
 using ConfigAdmin.Application.Export;
-using ConfigAdmin.Application.Services;
+using ConfigAdmin.Application.Hub;
+using ConfigAdmin.Application.RemoteSync;using ConfigAdmin.Application.Services;
 using ConfigAdmin.Domain.Services;
 using ConfigAdmin.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +22,16 @@ public static class DependencyInjection
         services.AddSingleton<ExportService>();
         services.AddSingleton<ExportRunQueryService>();
         services.AddSingleton<ConfiguratorLaunchService>();
+        services.AddSingleton<ManagedToolRegistryService>();
+        services.AddSingleton<ConfigMcpToolClient>();
+        services.AddSingleton<ConfigMcpFragmentBuilder>();
+        services.AddSingleton<ConfigMcpSyncService>();
+        services.AddSingleton<RemoteNodeService>();
+        services.AddSingleton<SyncAgentHubService>();
+        services.AddSingleton<SyncAgentClient>();
+        services.AddSingleton<SyncAgentConnectionService>();
+        services.AddSingleton<SyncReceiverOptions>();
+        services.AddSingleton<SyncReceiverHost>();
         return services;
     }
 }

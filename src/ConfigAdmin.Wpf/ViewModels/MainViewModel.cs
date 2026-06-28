@@ -15,6 +15,8 @@ public sealed class MainViewModel : ObservableObject
     private readonly ClientEditViewModel _clientEditViewModel;
     private readonly BaseEditViewModel _baseEditViewModel;
     private readonly ExportViewModel _exportViewModel;
+    private readonly ConfigMcpViewModel _configMcpViewModel;
+    private readonly RemoteNodesViewModel _remoteNodesViewModel;
     private readonly LogsViewModel _logsViewModel;
     private readonly ConfiguratorLaunchService _configuratorLaunchService;
 
@@ -30,6 +32,8 @@ public sealed class MainViewModel : ObservableObject
         ClientEditViewModel clientEditViewModel,
         BaseEditViewModel baseEditViewModel,
         ExportViewModel exportViewModel,
+        ConfigMcpViewModel configMcpViewModel,
+        RemoteNodesViewModel remoteNodesViewModel,
         LogsViewModel logsViewModel,
         ConfiguratorLaunchService configuratorLaunchService)
     {
@@ -40,6 +44,8 @@ public sealed class MainViewModel : ObservableObject
         _clientEditViewModel = clientEditViewModel;
         _baseEditViewModel = baseEditViewModel;
         _exportViewModel = exportViewModel;
+        _configMcpViewModel = configMcpViewModel;
+        _remoteNodesViewModel = remoteNodesViewModel;
         _logsViewModel = logsViewModel;
         _configuratorLaunchService = configuratorLaunchService;
 
@@ -52,6 +58,8 @@ public sealed class MainViewModel : ObservableObject
         OpenFolderCommand = new RelayCommand(OpenFolder, () => SelectedBase is not null);
         OpenLogsCommand = new RelayCommand(OpenLogs, () => SelectedBase is not null);
         OpenAllLogsCommand = new RelayCommand(OpenAllLogs);
+        OpenMcpCommand = new RelayCommand(OpenMcp);
+        OpenRemoteNodesCommand = new RelayCommand(OpenRemoteNodes);
         OpenConfiguratorCommand = new RelayCommand(OpenConfiguratorAsync, () => SelectedBase is not null);
         LockCommand = new RelayCommand(Lock);
 
@@ -86,6 +94,8 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand OpenFolderCommand { get; }
     public RelayCommand OpenLogsCommand { get; }
     public RelayCommand OpenAllLogsCommand { get; }
+    public RelayCommand OpenMcpCommand { get; }
+    public RelayCommand OpenRemoteNodesCommand { get; }
     public RelayCommand OpenConfiguratorCommand { get; }
     public RelayCommand LockCommand { get; }
 
@@ -184,6 +194,16 @@ public sealed class MainViewModel : ObservableObject
     {
         _logsViewModel.ClearBaseFilter();
         _navigationService.NavigateTo(_logsViewModel);
+    }
+
+    private void OpenMcp()
+    {
+        _navigationService.NavigateTo(_configMcpViewModel);
+    }
+
+    private void OpenRemoteNodes()
+    {
+        _navigationService.NavigateTo(_remoteNodesViewModel);
     }
 
     private async Task OpenConfiguratorAsync()

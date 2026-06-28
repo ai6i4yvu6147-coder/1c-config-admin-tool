@@ -34,6 +34,8 @@ public sealed class NavigationService : INavigationService
         var vm = _serviceProvider.GetRequiredService<TViewModel>();
         if (vm is MainViewModel main)
             _ = main.RefreshOnNavigateAsync();
+        if (vm is RemoteNodesViewModel remoteNodes)
+            _ = remoteNodes.RefreshOnNavigateAsync();
         SetRoot(vm);
     }
 
@@ -42,6 +44,8 @@ public sealed class NavigationService : INavigationService
         var vm = _serviceProvider.GetRequiredService<TViewModel>();
         if (vm is MainViewModel main)
             _ = main.RefreshOnNavigateAsync();
+        if (vm is RemoteNodesViewModel remoteNodes)
+            _ = remoteNodes.RefreshOnNavigateAsync();
         NavigateTo(vm);
     }
 
@@ -74,7 +78,12 @@ public sealed class NavigationService : INavigationService
             ClientEditViewModel vm => new ClientEditView { DataContext = vm },
             BaseEditViewModel vm => new BaseEditView { DataContext = vm },
             ExportViewModel vm => new ExportView { DataContext = vm },
+            ConfigMcpViewModel vm => new ConfigMcpView { DataContext = vm },
             LogsViewModel vm => new LogsView { DataContext = vm },
+            HubModeSelectorViewModel vm => new HubModeSelectorView { DataContext = vm },
+            SyncAgentViewModel vm => new SyncAgentView { DataContext = vm },
+            RemoteNodesViewModel vm => new RemoteNodesView { DataContext = vm },
+            RemoteNodeEditViewModel vm => new RemoteNodeEditView { DataContext = vm },
             _ => throw new NotSupportedException($"Неподдерживаемая ViewModel: {viewModel.GetType().Name}")
         };
 

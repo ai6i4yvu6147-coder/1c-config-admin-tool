@@ -17,3 +17,4 @@ echo === All builds completed ===
 echo   dist\console\configadmin.exe
 echo   dist\wpf\ConfigAdmin.exe
 echo.
+pause

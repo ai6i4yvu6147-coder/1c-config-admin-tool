@@ -1,4 +1,5 @@
 using System.Windows.Input;
+using ConfigAdmin.Application.Hub;
 using ConfigAdmin.Application.Services;
 using ConfigAdmin.Domain.Models;
 using ConfigAdmin.Wpf.Services;
@@ -9,6 +10,7 @@ public sealed class ExportViewModel : ObservableObject
 {
     private readonly ExportService _exportService;
     private readonly ProfileService _profileService;
+    private readonly ConfigMcpSyncService _configMcpSyncService;
     private readonly INavigationService _navigationService;
 
     private Guid _baseId;
@@ -17,6 +19,8 @@ public sealed class ExportViewModel : ObservableObject
     private bool _exportAllExtensions;
     private string _selectedExtensionsText = string.Empty;
     private bool _saveSettingsToProfile = true;
+    private bool _syncToMcpAfterExport = true;
+    private string _mcpFollowUpText = string.Empty;
     private string _progressText = string.Empty;
     private string _statusMessage = string.Empty;
     private bool _isBusy;
@@ -24,10 +28,12 @@ public sealed class ExportViewModel : ObservableObject
     public ExportViewModel(
         ExportService exportService,
         ProfileService profileService,
+        ConfigMcpSyncService configMcpSyncService,
         INavigationService navigationService)
     {
         _exportService = exportService;
         _profileService = profileService;
+        _configMcpSyncService = configMcpSyncService;
         _navigationService = navigationService;
 
         ExportCommand = new RelayCommand(ExportAsync, CanExport);
@@ -70,6 +76,20 @@ public sealed class ExportViewModel : ObservableObject
         set => SetProperty(ref _saveSettingsToProfile, value);
     }
 
+    public bool SyncToMcpAfterExport
+    {
+        get => _syncToMcpAfterExport;
+        set => SetProperty(ref _syncToMcpAfterExport, value);
+    }
+
+    public bool IsMcpSyncAvailable { get; private set; }
+
+    public string McpFollowUpText
+    {
+        get => _mcpFollowUpText;
+        set => SetProperty(ref _mcpFollowUpText, value);
+    }
+
     public string ProgressText
     {
         get => _progressText;
@@ -101,13 +121,20 @@ public sealed class ExportViewModel : ObservableObject
         BaseDisplayName = displayName;
         ProgressText = string.Empty;
         StatusMessage = string.Empty;
+        McpFollowUpText = string.Empty;
 
         var profile = await _profileService.GetInfobaseByIdAsync(baseId);
         if (profile is null)
         {
             StatusMessage = "База не найдена.";
+            IsMcpSyncAvailable = false;
+            RaisePropertyChanged(nameof(IsMcpSyncAvailable));
             return;
         }
+
+        IsMcpSyncAvailable = profile.ConfigMcpProjectId is Guid id && id != Guid.Empty;
+        SyncToMcpAfterExport = IsMcpSyncAvailable;
+        RaisePropertyChanged(nameof(IsMcpSyncAvailable));
 
         ExportConfiguration = profile.ExportConfiguration;
         ExportAllExtensions = profile.ExportAllExtensions;
@@ -174,6 +201,9 @@ public sealed class ExportViewModel : ObservableObject
                     details.Add("все расширения");
 
                 StatusMessage = $"Выгрузка завершена за {result.Duration:g}. {string.Join("; ", details)}";
+
+                if (SyncToMcpAfterExport && IsMcpSyncAvailable && plan.ExportConfiguration)
+                    await TrySyncToMcpAsync();
             }
             else
             {
@@ -218,5 +248,31 @@ public sealed class ExportViewModel : ObservableObject
             plan.ExportAllExtensions,
             plan.SelectedExtensions,
             profile.ExportFormat);
+    }
+
+    private async Task TrySyncToMcpAsync()
+    {
+        try
+        {
+            var syncResult = await _configMcpSyncService.SyncInfobaseAsync(_baseId);
+            if (syncResult.Success)
+            {
+                StatusMessage += " Синхронизация с config-mcp выполнена.";
+            }
+            else
+            {
+                StatusMessage += $" Синхронизация с config-mcp не выполнена: {syncResult.Message}";
+            }
+
+            if (syncResult.FollowUpHints.Count > 0)
+            {
+                McpFollowUpText = "Рекомендуемые действия config-mcp:\n" +
+                                  string.Join("\n", syncResult.FollowUpHints.Select(h => h.DisplayText));
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage += $" Синхронизация с config-mcp: {ex.Message}";
+        }
     }
 }

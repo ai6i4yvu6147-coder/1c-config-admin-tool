@@ -1,0 +1,38 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "WPF UI",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-wpf",
+      "program": "${workspaceFolder}/src/ConfigAdmin.Wpf/bin/Debug/net8.0-windows/ConfigAdmin.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "console": "internalConsole",
+      "stopAtEntry": false
+    },
+    {
+      "name": "Console",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-console",
+      "program": "${workspaceFolder}/src/ConfigAdmin.Console/bin/Debug/net8.0/configadmin.dll",
+      "args": ["--help"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopAtEntry": false
+    },
+    {
+      "name": "Tests",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-tests",
+      "program": "${workspaceFolder}/tests/ConfigAdmin.Tests/bin/Debug/net8.0/ConfigAdmin.Tests.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "console": "internalConsole",
+      "stopAtEntry": false
+    }
+  ]
+}

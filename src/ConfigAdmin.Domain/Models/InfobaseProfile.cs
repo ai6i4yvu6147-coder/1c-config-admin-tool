@@ -18,4 +18,6 @@ public sealed class InfobaseProfile
     public ExportFormat ExportFormat { get; set; } = ExportFormat.Hierarchical;
     public DateTimeOffset? LastExportAt { get; set; }
     public ExportStatus LastExportStatus { get; set; } = ExportStatus.Unknown;
+    public Guid? ProjectId { get; set; }
+    public Guid? ConfigMcpProjectId { get; set; }
 }

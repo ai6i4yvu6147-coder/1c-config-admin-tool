@@ -1,0 +1,59 @@
+<UserControl x:Class="ConfigAdmin.Wpf.Views.SyncAgentView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="640">
+            <TextBlock Text="Передатчик (Sync Agent)" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12" />
+            <TextBlock Text="Исходящее подключение к Hub. На RDP не требуются права администратора и настройка firewall."
+                       TextWrapping="Wrap"
+                       Foreground="Gray"
+                       Margin="0,0,0,16" />
+
+            <TextBlock Text="Hub URL" />
+            <TextBox Text="{Binding HubUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,12" />
+
+            <TextBlock Text="Node ID" />
+            <TextBox Text="{Binding NodeId, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,12" />
+
+            <TextBlock Text="Pairing-пароль узла" />
+            <PasswordBox x:Name="PairingPasswordBox"
+                           PasswordChanged="PairingPasswordChanged"
+                           Margin="0,4,0,12" />
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                <Button Content="Подключиться"
+                        Command="{Binding ConnectCommand}"
+                        Padding="10,4"
+                        Margin="0,0,8,0" />
+                <Button Content="Отключиться"
+                        Command="{Binding DisconnectCommand}"
+                        Padding="10,4" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBlock Text="{Binding LastHeartbeatText, StringFormat=Последний heartbeat: {0}}" Margin="0,0,0,8" />
+            <TextBlock Text="{Binding StatusMessage}" Foreground="Firebrick" TextWrapping="Wrap" Margin="0,0,0,4" />
+            <Button Content="Копировать ошибку"
+                    Command="{Binding CopyStatusCommand}"
+                    HorizontalAlignment="Left"
+                    Padding="8,2"
+                    Margin="0,0,0,12" />
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="Лог" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <Button Content="Копировать лог"
+                        Command="{Binding CopyLogCommand}"
+                        Padding="8,2"
+                        Margin="12,0,0,0" />
+            </StackPanel>
+            <TextBox Text="{Binding LogText, Mode=OneWay}"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     AcceptsReturn="True"
+                     VerticalScrollBarVisibility="Auto"
+                     MaxHeight="240"
+                     FontFamily="Consolas"
+                     Margin="0,0,0,8" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

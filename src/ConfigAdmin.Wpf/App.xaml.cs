@@ -29,7 +29,14 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<ClientEditViewModel>();
                 services.AddSingleton<BaseEditViewModel>();
                 services.AddSingleton<ExportViewModel>();
+                services.AddSingleton<ConfigMcpViewModel>();
                 services.AddSingleton<LogsViewModel>();
+                services.AddSingleton<HubModeSelectorViewModel>();
+                services.AddSingleton<SyncAgentViewModel>();
+                services.AddSingleton<RemoteNodesViewModel>();
+                services.AddSingleton<RemoteNodeEditViewModel>();
+                services.AddSingleton<AgentSettingsStore>();
+                services.AddSingleton<HubRuntimeService>();
                 services.AddSingleton<MainWindow>();
             })
             .Build();
@@ -41,6 +48,27 @@ public partial class App : System.Windows.Application
         navigation.Attach(mainWindow.RootContent);
 
         mainWindow.Show();
+        await NavigateInitialAsync(_host.Services, navigation);
+    }
+
+    private static async Task NavigateInitialAsync(IServiceProvider services, INavigationService navigation)
+    {
+        var settings = LocalAppSettings.Load();
+        if (settings.Mode is null)
+        {
+            navigation.SetRoot<HubModeSelectorViewModel>();
+            return;
+        }
+
+        if (settings.Mode == AppRunMode.Agent)
+        {
+            navigation.SetRoot<SyncAgentViewModel>();
+            return;
+        }
+
+        var hubRuntime = services.GetRequiredService<HubRuntimeService>();
+        hubRuntime.ConfigureListenUrl(settings.HubListenUrl);
+        await hubRuntime.StartReceiverAsync();
         navigation.SetRoot<VaultViewModel>();
     }
 
@@ -50,6 +78,10 @@ public partial class App : System.Windows.Application
         {
             var vault = _host.Services.GetRequiredService<VaultViewModel>();
             vault.LockVault();
+
+            var hubRuntime = _host.Services.GetRequiredService<HubRuntimeService>();
+            await hubRuntime.StopReceiverAsync();
+
             await _host.StopAsync();
             _host.Dispose();
         }

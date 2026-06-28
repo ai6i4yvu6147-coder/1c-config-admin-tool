@@ -1,0 +1,72 @@
+<UserControl x:Class="ConfigAdmin.Wpf.Views.ConfigMcpView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Loaded="OnLoaded">
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+            <TextBlock Text="MCP конфигураций (config-mcp)" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12" />
+
+            <TextBlock Text="Путь к portable config-mcp" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox Text="{Binding RootPath, UpdateSourceTrigger=PropertyChanged}" Padding="4" Margin="0,0,8,0" />
+                <Button Grid.Column="1" Content="Сохранить путь" Command="{Binding SavePathCommand}" Padding="10,4" Margin="0,0,8,0" />
+                <Button Grid.Column="2" Content="Открыть каталог" Command="{Binding OpenPortableCommand}" Padding="10,4" />
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <Button Content="Обновить статус" Command="{Binding RefreshCommand}" Padding="10,4" Margin="0,0,8,0" />
+                <Button Content="Привязать базу" Command="{Binding LinkCommand}" Padding="10,4" Margin="0,0,8,0" />
+                <Button Content="Синхронизировать выбранную" Command="{Binding SyncSelectedCommand}" Padding="10,4" Margin="0,0,8,0" FontWeight="SemiBold" />
+                <Button Content="Синхронизировать все привязанные" Command="{Binding SyncAllCommand}" Padding="10,4" Margin="0,0,8,0" />
+                <Button Content="Назад" Command="{Binding BackCommand}" Padding="10,4" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding StatusSummary}" Margin="0,0,0,4" />
+            <TextBlock Text="{Binding McpReadiness}" Foreground="Gray" Margin="0,0,0,4" />
+            <TextBlock Text="{Binding StatusMessage}" Foreground="Firebrick" TextWrapping="Wrap" Margin="0,0,0,4" />
+            <TextBlock Text="{Binding FollowUpText}" TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,8" />
+        </StackPanel>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="8" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <DockPanel Grid.Row="0">
+                <TextBlock DockPanel.Dock="Top" Text="Базы ConfigAdmin" FontWeight="SemiBold" Margin="0,0,0,4" />
+                <DataGrid ItemsSource="{Binding ConfigAdminBases}"
+                          SelectedItem="{Binding SelectedBase}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          CanUserAddRows="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Клиент / База" Binding="{Binding DisplayName}" Width="*" />
+                        <DataGridTextColumn Header="Привязка MCP" Binding="{Binding LinkStatus}" Width="200" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+
+            <DockPanel Grid.Row="2">
+                <TextBlock DockPanel.Dock="Top" Text="Проекты config-mcp (выберите для привязки)" FontWeight="SemiBold" Margin="0,0,0,4" />
+                <DataGrid ItemsSource="{Binding McpProjects}"
+                          SelectedItem="{Binding SelectedMcpProject}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          CanUserAddRows="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Проект" Binding="{Binding Name}" Width="*" />
+                        <DataGridTextColumn Header="Баз" Binding="{Binding DatabaseCount}" Width="60" />
+                        <DataGridCheckBoxColumn Header="Active" Binding="{Binding Active}" Width="60" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</UserControl>

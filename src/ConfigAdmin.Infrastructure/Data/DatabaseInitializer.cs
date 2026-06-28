@@ -24,6 +24,20 @@ public sealed class DatabaseInitializer
               export_root_path TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS projects (
+              id TEXT PRIMARY KEY,
+              client_id TEXT NOT NULL REFERENCES clients(id),
+              name TEXT NOT NULL,
+              active INTEGER NOT NULL DEFAULT 1
+            );
+
+            CREATE TABLE IF NOT EXISTS tool_instances (
+              id TEXT PRIMARY KEY,
+              module_id TEXT NOT NULL UNIQUE,
+              root_path TEXT NOT NULL,
+              enabled INTEGER NOT NULL DEFAULT 1
+            );
+
             CREATE TABLE IF NOT EXISTS infobases (
               id TEXT PRIMARY KEY,
               client_id TEXT NOT NULL REFERENCES clients(id),
@@ -38,7 +52,9 @@ public sealed class DatabaseInitializer
               selected_extensions_json TEXT,
               export_format INTEGER DEFAULT 0,
               last_export_at TEXT,
-              last_export_status INTEGER
+              last_export_status INTEGER,
+              project_id TEXT REFERENCES projects(id),
+              config_mcp_project_id TEXT
             );
 
             CREATE TABLE IF NOT EXISTS export_runs (
@@ -51,27 +67,64 @@ public sealed class DatabaseInitializer
               duration_ms INTEGER,
               command_masked TEXT,
               error_message TEXT,
-              output_path TEXT
+              output_path TEXT,
+              meta_json_path TEXT
             );
 
             CREATE TABLE IF NOT EXISTS vault_meta (
               key TEXT PRIMARY KEY,
               value BLOB NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS remote_nodes (
+              id TEXT PRIMARY KEY,
+              client_id TEXT NOT NULL REFERENCES clients(id),
+              name TEXT NOT NULL,
+              description TEXT,
+              pairing_secret_verifier BLOB NOT NULL,
+              hub_listen_url TEXT,
+              last_seen_at TEXT,
+              agent_version TEXT,
+              enabled INTEGER NOT NULL DEFAULT 1
+            );
+
+            CREATE TABLE IF NOT EXISTS agent_sessions (
+              token_hash BLOB PRIMARY KEY,
+              node_id TEXT NOT NULL REFERENCES remote_nodes(id),
+              expires_at TEXT NOT NULL
+            );
             """;
 
         await connection.ExecuteAsync(new CommandDefinition(sql, cancellationToken: ct));
-        await MigrateAsync(connection, ct);
+        await EnsureInfobaseHubColumnsAsync(connection, ct);
     }
 
-    private static async Task MigrateAsync(Microsoft.Data.Sqlite.SqliteConnection connection, CancellationToken ct)
+    private static async Task EnsureInfobaseHubColumnsAsync(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        CancellationToken ct)
     {
-        var hasColumn = await connection.ExecuteScalarAsync<long>(
+        foreach (var column in new[] { "project_id", "config_mcp_project_id" })
+        {
+            var hasColumn = await connection.ExecuteScalarAsync<long>(
+                new CommandDefinition(
+                    "SELECT COUNT(*) FROM pragma_table_info('infobases') WHERE name = @Name",
+                    new { Name = column },
+                    cancellationToken: ct));
+
+            if (hasColumn == 0)
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    $"ALTER TABLE infobases ADD COLUMN {column} TEXT",
+                    cancellationToken: ct));
+            }
+        }
+
+        var hasMetaJson = await connection.ExecuteScalarAsync<long>(
             new CommandDefinition(
                 "SELECT COUNT(*) FROM pragma_table_info('export_runs') WHERE name = 'meta_json_path'",
                 cancellationToken: ct));
 
-        if (hasColumn == 0)
+        if (hasMetaJson == 0)
         {
             await connection.ExecuteAsync(new CommandDefinition(
                 "ALTER TABLE export_runs ADD COLUMN meta_json_path TEXT",

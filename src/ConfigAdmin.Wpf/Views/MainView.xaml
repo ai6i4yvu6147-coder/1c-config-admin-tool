@@ -12,6 +12,8 @@
                 <Button Content="Открыть каталог" Command="{Binding OpenFolderCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="Логи" Command="{Binding OpenLogsCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="Журнал всех баз" Command="{Binding OpenAllLogsCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="MCP" Command="{Binding OpenMcpCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="RDP-узлы" Command="{Binding OpenRemoteNodesCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="Обновить" Command="{Binding RefreshCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="Заблокировать" Command="{Binding LockCommand}" Padding="10,4" />
             </StackPanel>

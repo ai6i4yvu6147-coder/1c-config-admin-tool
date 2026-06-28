@@ -12,7 +12,9 @@ publish/
 ## IDE
 .vs/
 .idea/
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 *.swp
 *~
 
