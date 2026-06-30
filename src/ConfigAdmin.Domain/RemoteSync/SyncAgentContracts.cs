@@ -45,11 +45,14 @@ public sealed class SyncJobDto
 
 public sealed class ExportJobSpec
 {
+    public Guid InstanceId { get; init; }
+    public ConfigurationKind Kind { get; init; }
+    public string DisplayName { get; init; } = string.Empty;
+    public string? DesignerName { get; init; }
     public string PlatformPath { get; init; } = string.Empty;
     public ConnectionType ConnectionType { get; init; }
     public string ConnectionString { get; init; } = string.Empty;
     public string? Username { get; init; }
-    public bool ExportConfiguration { get; init; } = true;
     public ExportFormat ExportFormat { get; init; } = ExportFormat.Hierarchical;
 }
 

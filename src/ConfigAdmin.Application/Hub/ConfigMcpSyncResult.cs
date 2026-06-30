@@ -7,6 +7,14 @@ public sealed class ConfigMcpSyncResult
     public IReadOnlyList<string> Warnings { get; init; } = [];
     public IReadOnlyList<string> Errors { get; init; } = [];
     public IReadOnlyList<ConfigMcpFollowUpHint> FollowUpHints { get; init; } = [];
+    public int ChangesCreated { get; init; }
+    public int ChangesUpdated { get; init; }
+    public int ChangesSkipped { get; init; }
+    public string? RegistryPath { get; init; }
+    public int IndexRebuildsSucceeded { get; init; }
+    public int IndexRebuildsFailed { get; init; }
+
+    public bool HasRegistryChanges => ChangesCreated + ChangesUpdated > 0;
 }
 
 public sealed class ConfigMcpFollowUpHint

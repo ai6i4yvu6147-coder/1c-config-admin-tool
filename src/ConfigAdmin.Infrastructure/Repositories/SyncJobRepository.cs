@@ -20,11 +20,11 @@ public sealed class SyncJobRepository : ISyncJobRepository
         await using var connection = _connectionFactory.CreateConnection();
         const string sql = """
             INSERT INTO sync_jobs (
-              id, infobase_id, remote_node_id, status, requested_at, started_at, finished_at,
+              id, infobase_id, configuration_instance_id, remote_node_id, status, requested_at, started_at, finished_at,
               upload_session_id, bytes_total, bytes_received, content_sha256, error_message,
               sync_mcp_after_complete
             ) VALUES (
-              @Id, @InfobaseId, @RemoteNodeId, @Status, @RequestedAt, @StartedAt, @FinishedAt,
+              @Id, @InfobaseId, @ConfigurationInstanceId, @RemoteNodeId, @Status, @RequestedAt, @StartedAt, @FinishedAt,
               @UploadSessionId, @BytesTotal, @BytesReceived, @ContentSha256, @ErrorMessage,
               @SyncMcpAfterComplete
             )
@@ -189,6 +189,7 @@ public sealed class SyncJobRepository : ISyncJobRepository
     {
         Id = job.Id.ToString(),
         InfobaseId = job.InfobaseId.ToString(),
+        ConfigurationInstanceId = job.ConfigurationInstanceId?.ToString(),
         RemoteNodeId = job.RemoteNodeId.ToString(),
         Status = (int)job.Status,
         RequestedAt = job.RequestedAt.ToString("O"),
@@ -206,6 +207,9 @@ public sealed class SyncJobRepository : ISyncJobRepository
     {
         Id = Guid.Parse(row.id),
         InfobaseId = Guid.Parse(row.infobase_id),
+        ConfigurationInstanceId = string.IsNullOrWhiteSpace(row.configuration_instance_id)
+            ? null
+            : Guid.Parse(row.configuration_instance_id),
         RemoteNodeId = Guid.Parse(row.remote_node_id),
         Status = (SyncJobStatus)row.status,
         RequestedAt = DateTimeOffset.Parse(row.requested_at),
@@ -226,6 +230,7 @@ public sealed class SyncJobRepository : ISyncJobRepository
     {
         public string id { get; set; } = string.Empty;
         public string infobase_id { get; set; } = string.Empty;
+        public string? configuration_instance_id { get; set; }
         public string remote_node_id { get; set; } = string.Empty;
         public int status { get; set; }
         public string requested_at { get; set; } = string.Empty;

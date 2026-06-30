@@ -37,19 +37,21 @@ public sealed class SyncAgentJobProcessor
         CancellationToken ct)
     {
         var workRoot = _workDirectoryResolver.GetJobWorkRoot(job.JobId, agentWorkRoot);
-        var configPath = _workDirectoryResolver.GetConfigurationWorkPath(
+        var configPath = _workDirectoryResolver.GetInstanceWorkPath(
             job.JobId,
+            job.Export.Kind,
+            job.Export.DesignerName,
             string.IsNullOrWhiteSpace(job.RemoteExportPath) ? null : job.RemoteExportPath,
             agentWorkRoot);
 
         try
         {
-            Report($"Job {job.JobId}: выгрузка конфигурации 1С → {configPath}");
-            Report("Выгрузка конфигурации 1С (DumpConfigToFiles, может занять много времени)…");
+            Report($"Job {job.JobId}: выгрузка {job.Export.DisplayName} → {configPath}");
+            Report($"Выгрузка 1С (DumpConfigToFiles, может занять много времени)…");
             var password = JobCredentialsCipher.Decrypt(
                 accessToken, job.JobId, job.NodeId, job.EncryptedConnectionPassword);
 
-            var exportResult = await _exportService.ExportConfigurationAsync(
+            var exportResult = await _exportService.ExportInstanceAsync(
                 job.Export,
                 password,
                 configPath,

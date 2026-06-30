@@ -93,10 +93,11 @@
 | R2.3 | Export на RDP из Hub |
 | R2.4 | Multi-PC Hub / central relay (проработка) |
 | R2.5 | **Live-прогресс export 1С на RDP:** poll work dir (file count + total size + elapsed) → heartbeat/Hub UI | ✅ |
-| R2.6 | **Скорость upload:** baseline ~800 MB / 30+ мин через Funnel; варианты — больший chunk (16–32 MB), keep-alive, параллельные chunks (осторожно с Funnel), прямой Tailscale без Funnel в LAN, сжатие zip, метрики MB/s в UI |
-| R2.7 | **Cleanup на RDP:** настройка «удалять work dir после успеха» (default on) / «оставить для отладки»; явный лог при сбое `TryCleanupWorkDir` |
+| R2.6 | **Скорость upload (оптимизация):** baseline ~800 MB / 30+ мин через Funnel; варианты — больший chunk (16–32 MB), keep-alive, параллельные chunks (осторожно с Funnel), прямой Tailscale без Funnel в LAN, сжатие zip |
+| R2.10 | **Скорость upload (отображение):** расчёт примерной скорости (MB/s, скользящее среднее по chunks) и ETA (`uploaded/total`); показ в UI Передатчика и в карточке job на Hub (heartbeat `progressMessage` или отдельные поля) |
+| R2.7 | **Cleanup на RDP (B4):** (1) «Очистить job-каталоги» — `agent\work\`, `agent\resume\`; (2) «Полная очистка» — весь `%AppData%\ConfigAdmin\` на RDP (agent + logs + local db). Подтверждение, блок при активном job. Позже: auto-cleanup после успеха | не начато |
 | R2.8 | **UX / GUI Remote Sync:** упростить Hub (Remote-базы, job status, tunnel) и Передатчик (pairing, один экран прогресса); см. продуктовый backlog |
-| R2.9 | **Полный MCP-цикл после sync:** orchestration `apply-registry` → `rebuild-index` (парсинг XML на Hub); сейчас только apply-registry + UI hint |
+| R2.9 | **Полный MCP-цикл после sync (H6):** Hub orchestration `apply-registry` → `rebuild-index` | **готово** (2026-06-30, локальный E2E расширения ✅) |
 
 ---
 

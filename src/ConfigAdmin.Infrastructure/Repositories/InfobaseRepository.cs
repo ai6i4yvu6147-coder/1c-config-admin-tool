@@ -49,7 +49,7 @@ public sealed class InfobaseRepository : IInfobaseRepository
     public async Task<InfobaseProfile?> GetByNameAsync(string name, CancellationToken ct = default)
     {
         await using var connection = _connectionFactory.CreateConnection();
-        var row = await connection.QuerySingleOrDefaultAsync<InfobaseRow>(
+        var row = await connection.QueryFirstOrDefaultAsync<InfobaseRow>(
             new CommandDefinition(
                 "SELECT * FROM infobases WHERE name = @Name",
                 new { Name = name },

@@ -174,10 +174,19 @@ public class SyncAgentHubServiceTests
         });
 
         var progressStore = new SyncJobProgressStore();
+        var instanceRepo = new ConfigurationInstanceRepository(factory);
+        var infobaseRepo = new InfobaseRepository(factory);
+        var configService = new ConfigAdmin.Application.Services.InfobaseConfigurationService(
+            new ConfigurationTemplateRepository(factory),
+            instanceRepo,
+            new ConfigurationExportRepository(factory),
+            infobaseRepo);
         var orchestrator = new RemoteSyncOrchestrator(
             new SyncJobRepository(factory),
-            new InfobaseRepository(factory),
+            infobaseRepo,
             nodeRepo,
+            instanceRepo,
+            configService,
             new SecretVault(new VaultMetaRepository(factory)),
             progressStore);
 

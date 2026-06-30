@@ -17,7 +17,7 @@ public sealed class ExportService
 
     public Task<ExportResult> ExportByNameAsync(
         string baseName,
-        ExportPlan? planOverride = null,
+        InstanceExportPlan? planOverride = null,
         IProgress<ExportProgress>? progress = null,
         CancellationToken ct = default)
     {
@@ -31,7 +31,7 @@ public sealed class ExportService
 
     public Task<ExportResult> ExportByIdAsync(
         Guid infobaseId,
-        ExportPlan? planOverride = null,
+        InstanceExportPlan? planOverride = null,
         IProgress<ExportProgress>? progress = null,
         CancellationToken ct = default) =>
         _exportOrchestrator.ExportBaseAsync(infobaseId, planOverride, progress, ct);
@@ -62,7 +62,7 @@ public sealed class ExportService
 
     private async Task<ExportResult> ExportInternalAsync(
         Func<Task<Guid>> resolveId,
-        ExportPlan? planOverride,
+        InstanceExportPlan? planOverride,
         IProgress<ExportProgress>? progress,
         CancellationToken ct)
     {

@@ -66,13 +66,23 @@ public sealed class ProfileService
         ExportLocation exportLocation = ExportLocation.Local,
         Guid? remoteNodeId = null,
         string? remoteExportPath = null,
+        Guid? infobaseId = null,
         CancellationToken ct = default)
     {
         var client = await _clientRepository.GetByNameAsync(clientName, ct)
             ?? throw new InvalidOperationException($"Клиент '{clientName}' не найден.");
 
-        var profile = await _infobaseRepository.GetByNameAsync(baseName, ct)
+        InfobaseProfile profile;
+        if (infobaseId is Guid id)
+        {
+            profile = await _infobaseRepository.GetByIdAsync(id, ct)
+                ?? throw new InvalidOperationException("База не найдена.");
+        }
+        else
+        {
+            profile = await _infobaseRepository.GetByNameAsync(baseName, ct)
                       ?? new InfobaseProfile { Id = Guid.NewGuid(), ClientId = client.Id };
+        }
 
         profile.ClientId = client.Id;
         profile.Name = baseName;

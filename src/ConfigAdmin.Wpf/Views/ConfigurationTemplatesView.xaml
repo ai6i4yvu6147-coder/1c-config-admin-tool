@@ -1,0 +1,43 @@
+<UserControl x:Class="ConfigAdmin.Wpf.Views.ConfigurationTemplatesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="0,0,0,12">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="280" />
+        </Grid.ColumnDefinitions>
+
+        <DockPanel Grid.Column="0" Margin="0,0,12,0">
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                <Button Content="Добавить" Command="{Binding AddCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Обновить" Command="{Binding RefreshCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Назад" Command="{Binding BackCommand}" Padding="10,4" />
+            </StackPanel>
+
+            <DataGrid ItemsSource="{Binding Templates}"
+                      SelectedItem="{Binding SelectedTemplate}"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      CanUserAddRows="False">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Имя" Binding="{Binding Name}" Width="*" />
+                    <DataGridTextColumn Header="Тип" Binding="{Binding KindLabel}" Width="100" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </DockPanel>
+
+        <StackPanel Grid.Column="1">
+            <TextBlock Text="Шаблон конфигурации" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12" />
+            <TextBlock Text="Имя (логическое)" />
+            <TextBox Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,12" />
+            <TextBlock Text="Описание" />
+            <TextBox Text="{Binding EditDescription, UpdateSourceTrigger=PropertyChanged}"
+                     AcceptsReturn="True" Height="60" Margin="0,4,0,12" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                <Button Content="Сохранить" Command="{Binding SaveCommand}" Padding="10,4" Margin="0,0,8,0" />
+                <Button Content="Удалить" Command="{Binding DeleteCommand}" Padding="10,4" />
+            </StackPanel>
+            <TextBlock Text="{Binding StatusMessage}" Foreground="Firebrick" TextWrapping="Wrap" />
+        </StackPanel>
+    </Grid>
+</UserControl>

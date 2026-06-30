@@ -17,6 +17,8 @@ public static class DependencyInjection
         services.AddInfrastructure(databasePath);
         services.AddConfigAdminLogging();
         services.AddSingleton<IExportOrchestrator, ExportOrchestrator>();
+        services.AddSingleton<ConfigurationCatalogService>();
+        services.AddSingleton<InfobaseConfigurationService>();
         services.AddSingleton<ProfileService>();
         services.AddSingleton<VaultSessionService>();
         services.AddSingleton<ConnectionTestService>();
@@ -26,6 +28,7 @@ public static class DependencyInjection
         services.AddSingleton<ManagedToolRegistryService>();
         services.AddSingleton<ConfigMcpToolClient>();
         services.AddSingleton<ConfigMcpFragmentBuilder>();
+        services.AddSingleton<ConfigMcpProjectsJsonMerger>();
         services.AddSingleton<ConfigMcpSyncService>();
         services.AddSingleton<RemoteNodeService>();
         services.AddSingleton<RemoteSyncOrchestrator>();

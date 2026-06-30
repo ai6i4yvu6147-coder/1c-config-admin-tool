@@ -1,4 +1,5 @@
-using Xunit;
+using ConfigAdmin.Application.Services;
+using ConfigAdmin.Domain;
 using ConfigAdmin.Domain.Enums;
 using ConfigAdmin.Domain.Integration;
 using ConfigAdmin.Domain.Models;
@@ -8,8 +9,10 @@ using ConfigAdmin.Domain.Services;
 using ConfigAdmin.Application.Export;
 using ConfigAdmin.Infrastructure;
 using ConfigAdmin.Infrastructure.FileSystem;
+using ConfigAdmin.Infrastructure.Repositories;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Xunit;
 
 namespace ConfigAdmin.Tests;
 
@@ -37,10 +40,7 @@ public class ExportOrchestratorTests
             PlatformPath = @"C:\Program Files\1cv8\8.3.24.0\bin\1cv8.exe",
             ConnectionType = ConnectionType.Server,
             ConnectionString = @"srv\erp",
-            Username = "Admin",
-            ExportConfiguration = true,
-            ExportAllExtensions = false,
-            SelectedExtensions = []
+            Username = "Admin"
         };
 
         var infobaseRepo = new Mock<IInfobaseRepository>();
@@ -53,6 +53,12 @@ public class ExportOrchestratorTests
 
         var exportRunRepo = new Mock<IExportRunRepository>();
         exportRunRepo.Setup(r => r.SaveAsync(It.IsAny<ExportRunLog>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var exportRepo = new Mock<IConfigurationExportRepository>();
+        exportRepo.Setup(r => r.MarkAllNotCurrentForInstanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        exportRepo.Setup(r => r.SaveAsync(It.IsAny<ConfigurationExport>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var vault = new Mock<ISecretVault>();
@@ -76,24 +82,34 @@ public class ExportOrchestratorTests
 
         var pathBuilder = new ExportPathBuilder();
         var runArtifactPathBuilder = new RunArtifactPathBuilder();
-        var orchestrator = new ExportOrchestrator(
+        var orchestrator = CreateOrchestrator(
             infobaseRepo.Object,
             clientRepo.Object,
             exportRunRepo.Object,
+            exportRepo.Object,
             vault.Object,
             cli.Object,
             pathBuilder,
-            runArtifactPathBuilder,
-            new AtomicDirectoryService(),
-            NullLogger<ExportOrchestrator>.Instance);
+            runArtifactPathBuilder);
 
-        var result = await orchestrator.ExportBaseAsync(baseId);
+        var plan = new InstanceExportPlan
+        {
+            Instances =
+            [
+                new ExportInstancePlan
+                {
+                    InstanceId = Guid.NewGuid(),
+                    Kind = ConfigurationKind.Base,
+                    DisplayName = "Основная конфигурация"
+                }
+            ]
+        };
+
+        var result = await orchestrator.ExportBaseAsync(baseId, plan);
 
         Assert.True(result.Success);
         var configPath = pathBuilder.GetConfigurationPath(root, "ClientA", "BaseERP");
         Assert.True(File.Exists(Path.Combine(configPath, "marker.txt")));
-        Assert.False(Directory.Exists(Path.Combine(root, "ClientA", "BaseERP", "current")));
-        Assert.False(Directory.Exists(Path.Combine(root, "ClientA", "BaseERP", "logs")));
 
         var runsRoot = Path.Combine(AppPaths.RunsDirectory, "ClientA", "BaseERP");
         Assert.True(Directory.Exists(runsRoot));
@@ -119,8 +135,7 @@ public class ExportOrchestratorTests
             Name = "BaseERP",
             PlatformPath = @"C:\1cv8.exe",
             ConnectionType = ConnectionType.Server,
-            ConnectionString = "srv\\erp",
-            ExportConfiguration = true
+            ConnectionString = "srv\\erp"
         };
 
         var infobaseRepo = new Mock<IInfobaseRepository>();
@@ -132,6 +147,7 @@ public class ExportOrchestratorTests
         var exportRunRepo = new Mock<IExportRunRepository>();
         exportRunRepo.Setup(r => r.SaveAsync(It.IsAny<ExportRunLog>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
+        var exportRepo = new Mock<IConfigurationExportRepository>();
 
         var cli = new Mock<IOneCCliAdapter>();
         cli.Setup(a => a.BuildDumpConfigCommand(It.IsAny<DumpConfigRequest>())).Returns("DESIGNER");
@@ -144,18 +160,30 @@ public class ExportOrchestratorTests
                 Duration = TimeSpan.FromSeconds(1)
             });
 
-        var orchestrator = new ExportOrchestrator(
+        var orchestrator = CreateOrchestrator(
             infobaseRepo.Object,
             clientRepo.Object,
             exportRunRepo.Object,
+            exportRepo.Object,
             new Mock<ISecretVault>().Object,
             cli.Object,
             pathBuilder,
-            new RunArtifactPathBuilder(),
-            new AtomicDirectoryService(),
-            NullLogger<ExportOrchestrator>.Instance);
+            new RunArtifactPathBuilder());
 
-        var result = await orchestrator.ExportBaseAsync(baseId);
+        var plan = new InstanceExportPlan
+        {
+            Instances =
+            [
+                new ExportInstancePlan
+                {
+                    InstanceId = Guid.NewGuid(),
+                    Kind = ConfigurationKind.Base,
+                    DisplayName = "Основная конфигурация"
+                }
+            ]
+        };
+
+        var result = await orchestrator.ExportBaseAsync(baseId, plan);
 
         Assert.False(result.Success);
         Assert.True(File.Exists(Path.Combine(configPath, "keep.txt")));
@@ -180,10 +208,7 @@ public class ExportOrchestratorTests
             Name = "BaseERP",
             PlatformPath = @"C:\1cv8.exe",
             ConnectionType = ConnectionType.Server,
-            ConnectionString = "srv\\erp",
-            ExportConfiguration = false,
-            ExportAllExtensions = false,
-            SelectedExtensions = ["MyExt"]
+            ConnectionString = "srv\\erp"
         };
 
         var infobaseRepo = new Mock<IInfobaseRepository>();
@@ -194,6 +219,11 @@ public class ExportOrchestratorTests
         clientRepo.Setup(r => r.GetByIdAsync(clientId, It.IsAny<CancellationToken>())).ReturnsAsync(client);
         var exportRunRepo = new Mock<IExportRunRepository>();
         exportRunRepo.Setup(r => r.SaveAsync(It.IsAny<ExportRunLog>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var exportRepo = new Mock<IConfigurationExportRepository>();
+        exportRepo.Setup(r => r.MarkAllNotCurrentForInstanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        exportRepo.Setup(r => r.SaveAsync(It.IsAny<ConfigurationExport>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var cli = new Mock<IOneCCliAdapter>();
@@ -208,22 +238,28 @@ public class ExportOrchestratorTests
                 return new ProcessResult { ExitCode = 0, CommandLineMasked = "masked", Duration = TimeSpan.FromSeconds(1) };
             });
 
-        var orchestrator = new ExportOrchestrator(
+        var orchestrator = CreateOrchestrator(
             infobaseRepo.Object,
             clientRepo.Object,
             exportRunRepo.Object,
+            exportRepo.Object,
             new Mock<ISecretVault>().Object,
             cli.Object,
             pathBuilder,
-            new RunArtifactPathBuilder(),
-            new AtomicDirectoryService(),
-            NullLogger<ExportOrchestrator>.Instance);
+            new RunArtifactPathBuilder());
 
-        var plan = new ExportPlan
+        var plan = new InstanceExportPlan
         {
-            ExportConfiguration = false,
-            ExportAllExtensions = false,
-            SelectedExtensions = ["MyExt"]
+            Instances =
+            [
+                new ExportInstancePlan
+                {
+                    InstanceId = Guid.NewGuid(),
+                    Kind = ConfigurationKind.Extension,
+                    DisplayName = "MyExt",
+                    DesignerName = "MyExt"
+                }
+            ]
         };
 
         var result = await orchestrator.ExportBaseAsync(baseId, plan);
@@ -231,6 +267,46 @@ public class ExportOrchestratorTests
         Assert.True(result.Success);
         Assert.True(File.Exists(Path.Combine(configPath, "keep.txt")));
         Assert.True(File.Exists(pathBuilder.GetExtensionPath(root, "ClientA", "BaseERP", "MyExt") + "\\ext.txt"));
+    }
+
+    private static ExportOrchestrator CreateOrchestrator(
+        IInfobaseRepository infobaseRepo,
+        IClientRepository clientRepo,
+        IExportRunRepository exportRunRepo,
+        IConfigurationExportRepository exportRepo,
+        ISecretVault vault,
+        IOneCCliAdapter cli,
+        IExportPathBuilder pathBuilder,
+        IRunArtifactPathBuilder runArtifactPathBuilder)
+    {
+        var templateRepo = new Mock<IConfigurationTemplateRepository>();
+        templateRepo.Setup(r => r.GetSystemBaseTemplateAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConfigurationTemplate
+            {
+                Id = ConfigurationTemplateIds.SystemBaseTemplateId,
+                Name = "Основная конфигурация",
+                Kind = ConfigurationKind.Base,
+                IsSystem = true
+            });
+        var instanceRepo = new Mock<IConfigurationInstanceRepository>();
+        var configService = new InfobaseConfigurationService(
+            templateRepo.Object,
+            instanceRepo.Object,
+            exportRepo,
+            infobaseRepo);
+
+        return new ExportOrchestrator(
+            infobaseRepo,
+            clientRepo,
+            exportRunRepo,
+            exportRepo,
+            configService,
+            vault,
+            cli,
+            pathBuilder,
+            runArtifactPathBuilder,
+            new AtomicDirectoryService(),
+            NullLogger<ExportOrchestrator>.Instance);
     }
 
     private static string ExtractOutputPath(string arguments)

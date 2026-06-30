@@ -1,6 +1,6 @@
 ## Remote Sync — текущий статус
 
-*Обновлено: 2026-06-28*
+*Обновлено: 2026-06-30*
 
 ### Итог Phase R-Ping + R1 (E2E)
 
@@ -10,9 +10,11 @@
 
 **Проверен E2E R1 — transport (2026-06-28):** реальная база 1С на RDP → export (~34k файлов, ~1,1 GB, ~6 мин) → zip (~800 MB) → chunk upload через Funnel (~30+ мин) → `Completed` → конфигурация в `{ExportRoot}/{Client}/{Base}/Основная конфигурация` на Hub.
 
+**Проверен E2E MCP — локальная выгрузка расширения (2026-06-30):** hub-first привязка MCP → выгрузка расширения на Hub → `apply-registry` + H6 `rebuild-index` → расширение в MCP.
+
 **R1 MVP (transport + apply на диск):** **готово**.
 
-**Полный продуктовый цикл (transport + MCP):** доставка на Hub → `apply-registry` → **`rebuild-index` / парсинг XML в index config-mcp** — **ещё не автоматизирован** на Hub (Phase 3 orchestration). Если парсинг не запускался, config-mcp корректно показывает «нет базы» при уже лежащих на диске файлах — это **ожидаемо** для R1 E2E.
+**Полный продуктовый цикл (transport + MCP):** доставка/выгрузка на Hub → `apply-registry` → **`rebuild-index`** (H6 на Hub, **готово** 2026-06-30).
 
 ---
 
@@ -50,9 +52,9 @@
 - Расширения конфигурации в Remote sync (MVP — только основная конфигурация)
 - Автопереподключение Передатчика при длительном обрыве
 - **Оптимизация скорости upload** (~800 MB / 30+ мин через Funnel — см. [`implementation-plan.md`](implementation-plan.md) R2.6)
-- **Настройка cleanup на RDP** (удалять work dir после успеха или оставлять для отладки/resume)
+- **Cleanup на RDP (B4):** две кнопки на Передатчике — job-каталоги / полная очистка `%AppData%\ConfigAdmin\`; см. [`../todo.md`](../todo.md) § B4
 - **Упрощение GUI** Remote Sync (Hub + Передатчик — сейчас перегружен; проработка UX отдельно)
-- **config-mcp:** orchestration `rebuild-index` после доставки (см. [`../admin-hub/integration.md`](../admin-hub/integration.md) — workflow export → MCP)
+- **Hub H6:** orchestration `rebuild-index` — **готово** (2026-06-30)
 
 ### Известные проблемы / фиксы
 
@@ -60,8 +62,9 @@
 |---------|---------|--------|
 | `HttpClient.Timeout of 30 seconds` на upload | Chunk ~8 MB через Funnel дольше 30 с; клиент не совпадал с transport.md (120 s) | **исправлено:** chunk 180 s, complete 600 s, retry chunk ×3 |
 | Плотный журнал Передатчика во время export | Каждый tick монитора (12 с) писался в `LogLines` | **исправлено:** routine progress только в CurrentProgress + heartbeat |
-| Файлы на RDP после успешного sync | `TryCleanupWorkDir` после complete; возможен сбой (lock/права) или кастомный `remote_export_path` | **открыто:** диагностика + опция «удалять / оставить» (R2.7) |
-| MCP не видит выгруженную конфигурацию («нет базы») | XML на диске есть, но **парсинг / `rebuild-index` не запускался**; R1 делает только apply-registry (опционально), без orchestration rebuild | **ожидаемо для R1;** полный цикл — Phase 3 Hub orchestration |
+| Файлы на RDP после успешного sync | `TryCleanupWorkDir` только текущий job | **открыто (B4):** 2 кнопки — job dirs / полная очистка ConfigAdmin на RDP |
+| MCP не видит выгруженную конфигурацию | `rebuild-index` не запускался | **исправлено (H6, 2026-06-30)** |
+| Hub вылетает при повторном открытии карточки базы | та же ИБ, без сообщений; debug | **открыто (B2, P0)** |
 
 ---
 

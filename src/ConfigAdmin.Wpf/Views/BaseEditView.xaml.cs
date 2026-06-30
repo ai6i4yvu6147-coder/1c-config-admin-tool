@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows;
 using ConfigAdmin.Wpf.ViewModels;
 
 namespace ConfigAdmin.Wpf.Views;

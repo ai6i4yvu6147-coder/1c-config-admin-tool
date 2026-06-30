@@ -32,20 +32,12 @@ public sealed class NavigationService : INavigationService
     public void SetRoot<TViewModel>() where TViewModel : class
     {
         var vm = _serviceProvider.GetRequiredService<TViewModel>();
-        if (vm is MainViewModel main)
-            _ = main.RefreshOnNavigateAsync();
-        if (vm is RemoteNodesViewModel remoteNodes)
-            _ = remoteNodes.RefreshOnNavigateAsync();
         SetRoot(vm);
     }
 
     public void NavigateTo<TViewModel>() where TViewModel : class
     {
         var vm = _serviceProvider.GetRequiredService<TViewModel>();
-        if (vm is MainViewModel main)
-            _ = main.RefreshOnNavigateAsync();
-        if (vm is RemoteNodesViewModel remoteNodes)
-            _ = remoteNodes.RefreshOnNavigateAsync();
         NavigateTo(vm);
     }
 
@@ -84,8 +76,12 @@ public sealed class NavigationService : INavigationService
             SyncAgentViewModel vm => new SyncAgentView { DataContext = vm },
             RemoteNodesViewModel vm => new RemoteNodesView { DataContext = vm },
             RemoteNodeEditViewModel vm => new RemoteNodeEditView { DataContext = vm },
+            ConfigurationTemplatesViewModel vm => new ConfigurationTemplatesView { DataContext = vm },
             _ => throw new NotSupportedException($"Неподдерживаемая ViewModel: {viewModel.GetType().Name}")
         };
+
+        if (viewModel is IRefreshOnNavigate refreshable)
+            _ = refreshable.RefreshOnNavigateAsync();
 
         NavigationChanged?.Invoke();
     }

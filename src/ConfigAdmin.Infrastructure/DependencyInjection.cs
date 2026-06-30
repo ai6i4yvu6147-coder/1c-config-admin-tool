@@ -26,6 +26,9 @@ public static class DependencyInjection
         services.AddSingleton<IHubProjectRepository, HubProjectRepository>();
         services.AddSingleton<IRemoteNodeRepository, RemoteNodeRepository>();
         services.AddSingleton<IAgentSessionRepository, AgentSessionRepository>();
+        services.AddSingleton<IConfigurationTemplateRepository, ConfigurationTemplateRepository>();
+        services.AddSingleton<IConfigurationInstanceRepository, ConfigurationInstanceRepository>();
+        services.AddSingleton<IConfigurationExportRepository, ConfigurationExportRepository>();
         services.AddSingleton<ISyncJobRepository, SyncJobRepository>();
         services.AddSingleton<PairingSecretService>();
         services.AddSingleton<ISecretVault, SecretVault>();

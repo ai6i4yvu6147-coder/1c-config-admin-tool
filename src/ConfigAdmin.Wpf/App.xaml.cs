@@ -22,6 +22,7 @@ public partial class App : System.Windows.Application
             .ConfigureServices(services =>
             {
                 services.AddConfigAdminApplication();
+                services.AddSingleton<UiActivityLog>();
                 services.AddSingleton<FileDialogService>();
                 services.AddSingleton<INavigationService, NavigationService>();
                 services.AddSingleton<VaultViewModel>();
@@ -35,6 +36,7 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<SyncAgentViewModel>();
                 services.AddSingleton<RemoteNodesViewModel>();
                 services.AddSingleton<RemoteNodeEditViewModel>();
+                services.AddSingleton<ConfigurationTemplatesViewModel>();
                 services.AddSingleton<AgentSettingsStore>();
                 services.AddSingleton<HubRuntimeService>();
                 services.AddSingleton<MainWindow>();

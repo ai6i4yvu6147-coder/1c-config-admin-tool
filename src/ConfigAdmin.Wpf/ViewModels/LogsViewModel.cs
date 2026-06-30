@@ -2,26 +2,36 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using ConfigAdmin.Application.Services;
+using ConfigAdmin.Infrastructure;
 using ConfigAdmin.Wpf.Services;
 
 namespace ConfigAdmin.Wpf.ViewModels;
 
-public sealed class LogsViewModel : ObservableObject
+public sealed class LogsViewModel : ObservableObject, IRefreshOnNavigate
 {
     private readonly ExportRunQueryService _exportRunQueryService;
     private readonly INavigationService _navigationService;
+    private readonly UiActivityLog _activityLog;
 
     private ExportRunListItem? _selectedRun;
     private ExportRunMetaStep? _selectedStep;
+    private UiActivityEntry? _selectedAppEvent;
     private string _title = "Журнал выгрузок";
     private string _stepDetailText = string.Empty;
+    private string _appEventDetailText = string.Empty;
+    private int _selectedTabIndex;
 
-    public LogsViewModel(ExportRunQueryService exportRunQueryService, INavigationService navigationService)
+    public LogsViewModel(
+        ExportRunQueryService exportRunQueryService,
+        INavigationService navigationService,
+        UiActivityLog activityLog)
     {
         _exportRunQueryService = exportRunQueryService;
         _navigationService = navigationService;
+        _activityLog = activityLog;
         Runs = new ObservableCollection<ExportRunListItem>();
         Steps = new ObservableCollection<ExportRunMetaStep>();
+        AppEvents = _activityLog.Entries;
 
         BackCommand = new RelayCommand(() => _navigationService.GoBack());
         RefreshCommand = new RelayCommand(RefreshAsync);
@@ -29,10 +39,41 @@ public sealed class LogsViewModel : ObservableObject
         OpenRunArtifactsCommand = new RelayCommand(OpenRunArtifacts, () => SelectedRun?.RunArtifactsDirectory is not null);
         OpenMetaCommand = new RelayCommand(OpenMeta, () => SelectedRun?.MetaJsonPath is not null);
         OpenStepOutCommand = new RelayCommand(OpenStepOut, () => SelectedStep?.OutLogPath is not null);
+        OpenAppLogFileCommand = new RelayCommand(OpenAppLogFile);
     }
 
     public ObservableCollection<ExportRunListItem> Runs { get; }
     public ObservableCollection<ExportRunMetaStep> Steps { get; }
+    public ObservableCollection<UiActivityEntry> AppEvents { get; }
+
+    public int SelectedTabIndex
+    {
+        get => _selectedTabIndex;
+        set => SetProperty(ref _selectedTabIndex, value);
+    }
+
+    public UiActivityEntry? SelectedAppEvent
+    {
+        get => _selectedAppEvent;
+        set
+        {
+            if (EqualityComparer<UiActivityEntry?>.Default.Equals(_selectedAppEvent, value))
+                return;
+
+            _selectedAppEvent = value;
+            RaisePropertyChanged();
+            UpdateAppEventDetailText();
+        }
+    }
+
+    public string AppEventDetailText
+    {
+        get => _appEventDetailText;
+        set => SetProperty(ref _appEventDetailText, value);
+    }
+
+    public string AppLogFileHint =>
+        $"Файл Serilog: {Path.Combine(AppPaths.LogsDirectory, "configadmin-*.log")}";
 
     public ExportRunListItem? SelectedRun
     {
@@ -80,6 +121,9 @@ public sealed class LogsViewModel : ObservableObject
     public RelayCommand OpenRunArtifactsCommand { get; }
     public RelayCommand OpenMetaCommand { get; }
     public RelayCommand OpenStepOutCommand { get; }
+    public RelayCommand OpenAppLogFileCommand { get; }
+
+    public void ShowAppEventsTab() => SelectedTabIndex = 1;
 
     private Guid? _filterInfobaseId;
 
@@ -96,6 +140,8 @@ public sealed class LogsViewModel : ObservableObject
         Title = $"Журнал: {displayName}";
         _ = RefreshAsync();
     }
+
+    public Task RefreshOnNavigateAsync() => RefreshAsync();
 
     public async Task RefreshAsync()
     {
@@ -155,6 +201,32 @@ public sealed class LogsViewModel : ObservableObject
         StepDetailText = parts.Count > 0
             ? string.Join(Environment.NewLine + Environment.NewLine, parts)
             : "Нет текста ошибки для этого шага.";
+    }
+
+    private void UpdateAppEventDetailText()
+    {
+        if (SelectedAppEvent is null)
+        {
+            AppEventDetailText = string.Empty;
+            return;
+        }
+
+        var parts = new List<string>
+        {
+            $"[{SelectedAppEvent.Timestamp:yyyy-MM-dd HH:mm:ss}] {SelectedAppEvent.LevelLabel} / {SelectedAppEvent.Source}",
+            SelectedAppEvent.Message
+        };
+
+        if (!string.IsNullOrWhiteSpace(SelectedAppEvent.Detail))
+            parts.Add(SelectedAppEvent.Detail);
+
+        AppEventDetailText = string.Join(Environment.NewLine + Environment.NewLine, parts);
+    }
+
+    private void OpenAppLogFile()
+    {
+        Directory.CreateDirectory(AppPaths.LogsDirectory);
+        Process.Start(new ProcessStartInfo(AppPaths.LogsDirectory) { UseShellExecute = true });
     }
 
     private void OpenOutputFolder()

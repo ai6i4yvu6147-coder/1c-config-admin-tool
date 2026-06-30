@@ -89,6 +89,61 @@ public class HubRepositoryTests
         Assert.Equal(mcpProjectId, loaded.ConfigMcpProjectId);
     }
 
+    [Fact]
+    public async Task ConfigurationInstanceRepository_PersistsMcpLinkFields()
+    {
+        var dbPath = CreateTempDbPath();
+        var services = new ServiceCollection();
+        services.AddInfrastructure(dbPath);
+        var provider = services.BuildServiceProvider();
+
+        await provider.GetRequiredService<DatabaseInitializer>().InitializeAsync();
+
+        var clientRepo = provider.GetRequiredService<IClientRepository>();
+        var infobaseRepo = provider.GetRequiredService<IInfobaseRepository>();
+        var instanceRepo = provider.GetRequiredService<IConfigurationInstanceRepository>();
+
+        var clientId = Guid.NewGuid();
+        await clientRepo.SaveAsync(new ClientProfile
+        {
+            Id = clientId,
+            Name = "Client",
+            ExportRootPath = @"D:\Exports"
+        });
+
+        var infobaseId = Guid.NewGuid();
+        await infobaseRepo.SaveAsync(new InfobaseProfile
+        {
+            Id = infobaseId,
+            ClientId = clientId,
+            Name = "Base",
+            PlatformPath = @"C:\1cv8\8.3.27.1688\bin\1cv8.exe",
+            ConnectionType = Domain.Enums.ConnectionType.File,
+            ConnectionString = @"C:\base"
+        });
+
+        var instanceId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
+        var databaseId = Guid.NewGuid();
+        await instanceRepo.SaveAsync(new ConfigurationInstance
+        {
+            Id = instanceId,
+            InfobaseId = infobaseId,
+            TemplateId = Domain.ConfigurationTemplateIds.SystemBaseTemplateId,
+            Kind = Domain.Enums.ConfigurationKind.Base,
+            DisplayName = "Основная",
+            ExportEnabled = true,
+            SortOrder = 0,
+            ConfigMcpProjectId = projectId,
+            ConfigMcpDatabaseId = databaseId
+        });
+
+        var loaded = await instanceRepo.GetByIdAsync(instanceId);
+        Assert.NotNull(loaded);
+        Assert.Equal(projectId, loaded!.ConfigMcpProjectId);
+        Assert.Equal(databaseId, loaded.ConfigMcpDatabaseId);
+    }
+
     private static string CreateTempDbPath()
     {
         var dir = Path.Combine(Path.GetTempPath(), "configadmin-tests", Guid.NewGuid().ToString("N"));

@@ -1,4 +1,6 @@
 using ConfigAdmin.Application.RemoteSync;
+using ConfigAdmin.Application.Services;
+using ConfigAdmin.Domain;
 using ConfigAdmin.Domain.Enums;
 using ConfigAdmin.Domain.Models;
 using ConfigAdmin.Infrastructure.Data;
@@ -26,8 +28,9 @@ public class RemoteSyncOrchestratorTests
     {
         var (orchestrator, infobaseId, syncJobRepo) = await CreateOrchestratorAsync(vaultUnlocked: true);
 
-        var job = await orchestrator.RequestSyncAsync(infobaseId, syncMcpAfterComplete: false);
+        var jobs = await orchestrator.RequestSyncAsync(infobaseId, syncMcpAfterComplete: false);
 
+        var job = Assert.Single(jobs);
         Assert.Equal(SyncJobStatus.Pending, job.Status);
         var stored = await syncJobRepo.GetByIdAsync(job.Id);
         Assert.NotNull(stored);
@@ -43,11 +46,13 @@ public class RemoteSyncOrchestratorTests
 
         var vault = new SecretVault(new VaultMetaRepository(factory));
         await vault.InitializeAsync("master");
+        await vault.UnlockAsync("master");
         var encryptedBasePwd = vault.Encrypt("infobase-secret");
 
         var clientId = Guid.NewGuid();
         var infobaseId = Guid.NewGuid();
         var nodeId = Guid.NewGuid();
+        var instanceId = Guid.NewGuid();
 
         var clientRepo = new ClientRepository(factory);
         await clientRepo.SaveAsync(new ClientProfile
@@ -79,8 +84,19 @@ public class RemoteSyncOrchestratorTests
             ConnectionString = "C:\\Base",
             ExportLocation = ExportLocation.Remote,
             RemoteNodeId = nodeId,
-            EncryptedPassword = encryptedBasePwd,
-            ExportConfiguration = true
+            EncryptedPassword = encryptedBasePwd
+        });
+
+        var instanceRepo = new ConfigurationInstanceRepository(factory);
+        await instanceRepo.SaveAsync(new ConfigurationInstance
+        {
+            Id = instanceId,
+            InfobaseId = infobaseId,
+            TemplateId = ConfigurationTemplateIds.SystemBaseTemplateId,
+            Kind = ConfigurationKind.Base,
+            DisplayName = "Основная конфигурация",
+            ExportEnabled = true,
+            SortOrder = 0
         });
 
         var syncJobRepo = new SyncJobRepository(factory);
@@ -90,17 +106,26 @@ public class RemoteSyncOrchestratorTests
             Id = jobId,
             InfobaseId = infobaseId,
             RemoteNodeId = nodeId,
+            ConfigurationInstanceId = instanceId,
             Status = SyncJobStatus.Pending,
             RequestedAt = DateTimeOffset.UtcNow
         });
 
-        var orchestrator = new RemoteSyncOrchestrator(syncJobRepo, infobaseRepo, nodeRepo, vault, new SyncJobProgressStore());
+        var configService = new InfobaseConfigurationService(
+            new ConfigurationTemplateRepository(factory),
+            instanceRepo,
+            new ConfigurationExportRepository(factory),
+            infobaseRepo);
+
+        var orchestrator = new RemoteSyncOrchestrator(
+            syncJobRepo, infobaseRepo, nodeRepo, instanceRepo, configService, vault, new SyncJobProgressStore());
         const string accessToken = "test-agent-token";
         var job = await syncJobRepo.GetByIdAsync(jobId);
         var dto = await orchestrator.BuildJobDtoAsync(job!, accessToken);
 
         Assert.NotNull(dto);
         Assert.NotNull(dto!.EncryptedConnectionPassword);
+        Assert.Equal(ConfigurationKind.Base, dto.Export.Kind);
         var plain = JobCredentialsCipher.Decrypt(
             accessToken, jobId, nodeId, dto.EncryptedConnectionPassword);
         Assert.Equal("infobase-secret", plain);
@@ -153,13 +178,30 @@ public class RemoteSyncOrchestratorTests
             ConnectionType = ConnectionType.File,
             ConnectionString = "C:\\Base",
             ExportLocation = ExportLocation.Remote,
-            RemoteNodeId = nodeId,
-            ExportConfiguration = true
+            RemoteNodeId = nodeId
+        });
+
+        var instanceRepo = new ConfigurationInstanceRepository(factory);
+        await instanceRepo.SaveAsync(new ConfigurationInstance
+        {
+            Id = Guid.NewGuid(),
+            InfobaseId = infobaseId,
+            TemplateId = ConfigurationTemplateIds.SystemBaseTemplateId,
+            Kind = ConfigurationKind.Base,
+            DisplayName = "Основная конфигурация",
+            ExportEnabled = true,
+            SortOrder = 0
         });
 
         var syncJobRepo = new SyncJobRepository(factory);
-        var progressStore = new SyncJobProgressStore();
-        var orchestrator = new RemoteSyncOrchestrator(syncJobRepo, infobaseRepo, nodeRepo, vault, progressStore);
+        var configService = new InfobaseConfigurationService(
+            new ConfigurationTemplateRepository(factory),
+            instanceRepo,
+            new ConfigurationExportRepository(factory),
+            infobaseRepo);
+
+        var orchestrator = new RemoteSyncOrchestrator(
+            syncJobRepo, infobaseRepo, nodeRepo, instanceRepo, configService, vault, new SyncJobProgressStore());
         return (orchestrator, infobaseId, syncJobRepo);
     }
 }

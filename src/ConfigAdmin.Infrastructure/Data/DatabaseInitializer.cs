@@ -1,3 +1,5 @@
+using ConfigAdmin.Domain;
+using ConfigAdmin.Domain.Enums;
 using Dapper;
 
 namespace ConfigAdmin.Infrastructure.Data;
@@ -97,6 +99,7 @@ public sealed class DatabaseInitializer
             CREATE TABLE IF NOT EXISTS sync_jobs (
               id TEXT PRIMARY KEY,
               infobase_id TEXT NOT NULL REFERENCES infobases(id),
+              configuration_instance_id TEXT REFERENCES configuration_instances(id),
               remote_node_id TEXT NOT NULL REFERENCES remote_nodes(id),
               status INTEGER NOT NULL,
               requested_at TEXT NOT NULL,
@@ -109,10 +112,98 @@ public sealed class DatabaseInitializer
               error_message TEXT,
               sync_mcp_after_complete INTEGER NOT NULL DEFAULT 0
             );
+
+            CREATE TABLE IF NOT EXISTS configuration_templates (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              kind INTEGER NOT NULL,
+              description TEXT,
+              is_system INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS configuration_instances (
+              id TEXT PRIMARY KEY,
+              infobase_id TEXT NOT NULL REFERENCES infobases(id) ON DELETE CASCADE,
+              template_id TEXT REFERENCES configuration_templates(id),
+              kind INTEGER NOT NULL,
+              display_name TEXT NOT NULL,
+              designer_name TEXT,
+              export_enabled INTEGER NOT NULL DEFAULT 1,
+              sort_order INTEGER NOT NULL DEFAULT 0,
+              UNIQUE(infobase_id, template_id),
+              UNIQUE(infobase_id, designer_name)
+            );
+
+            CREATE TABLE IF NOT EXISTS configuration_exports (
+              id TEXT PRIMARY KEY,
+              instance_id TEXT NOT NULL REFERENCES configuration_instances(id) ON DELETE CASCADE,
+              exported_at TEXT,
+              is_current INTEGER NOT NULL DEFAULT 1
+            );
             """;
 
         await connection.ExecuteAsync(new CommandDefinition(sql, cancellationToken: ct));
         await EnsureInfobaseHubColumnsAsync(connection, ct);
+        await EnsureConfigurationInstanceMcpColumnsAsync(connection, ct);
+        await EnsureSyncJobInstanceColumnAsync(connection, ct);
+        await SeedSystemBaseTemplateAsync(connection, ct);
+    }
+
+    private static async Task EnsureConfigurationInstanceMcpColumnsAsync(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        CancellationToken ct)
+    {
+        foreach (var column in new[] { "config_mcp_project_id", "config_mcp_database_id" })
+        {
+            var hasColumn = await connection.ExecuteScalarAsync<long>(
+                new CommandDefinition(
+                    "SELECT COUNT(*) FROM pragma_table_info('configuration_instances') WHERE name = @Name",
+                    new { Name = column },
+                    cancellationToken: ct));
+
+            if (hasColumn == 0)
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    $"ALTER TABLE configuration_instances ADD COLUMN {column} TEXT",
+                    cancellationToken: ct));
+            }
+        }
+    }
+
+    private static async Task EnsureSyncJobInstanceColumnAsync(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        CancellationToken ct)
+    {
+        var hasColumn = await connection.ExecuteScalarAsync<long>(
+            new CommandDefinition(
+                "SELECT COUNT(*) FROM pragma_table_info('sync_jobs') WHERE name = 'configuration_instance_id'",
+                cancellationToken: ct));
+
+        if (hasColumn == 0)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "ALTER TABLE sync_jobs ADD COLUMN configuration_instance_id TEXT REFERENCES configuration_instances(id)",
+                cancellationToken: ct));
+        }
+    }
+
+    private static async Task SeedSystemBaseTemplateAsync(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        CancellationToken ct)
+    {
+        const string sql = """
+            INSERT INTO configuration_templates (id, name, kind, description, is_system)
+            VALUES (@Id, @Name, @Kind, @Description, 1)
+            ON CONFLICT(id) DO NOTHING
+            """;
+
+        await connection.ExecuteAsync(new CommandDefinition(sql, new
+        {
+            Id = ConfigurationTemplateIds.SystemBaseTemplateId.ToString(),
+            Name = "Основная конфигурация",
+            Kind = (int)ConfigurationKind.Base,
+            Description = "Системный шаблон основной конфигурации"
+        }, cancellationToken: ct));
     }
 
     private static async Task EnsureInfobaseHubColumnsAsync(

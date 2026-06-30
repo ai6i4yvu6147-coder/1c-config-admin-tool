@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Windows.Input;
 using ConfigAdmin.Application.Hub;
 using ConfigAdmin.Application.RemoteSync;
@@ -12,6 +13,7 @@ public sealed class ExportViewModel : ObservableObject
 {
     private readonly ExportService _exportService;
     private readonly ProfileService _profileService;
+    private readonly InfobaseConfigurationService _configurationService;
     private readonly ConfigMcpSyncService _configMcpSyncService;
     private readonly RemoteSyncOrchestrator _remoteSyncOrchestrator;
     private readonly VaultSessionService _vaultSessionService;
@@ -20,20 +22,17 @@ public sealed class ExportViewModel : ObservableObject
     private Guid _baseId;
     private string _baseDisplayName = string.Empty;
     private bool _isRemoteBase;
-    private bool _exportConfiguration = true;
-    private bool _exportAllExtensions;
-    private string _selectedExtensionsText = string.Empty;
-    private bool _saveSettingsToProfile = true;
     private bool _syncToMcpAfterExport = true;
     private string _mcpFollowUpText = string.Empty;
     private string _progressText = string.Empty;
     private string _statusMessage = string.Empty;
     private bool _isBusy;
-    private Guid? _activeJobId;
+    private readonly List<Guid> _activeJobIds = [];
 
     public ExportViewModel(
         ExportService exportService,
         ProfileService profileService,
+        InfobaseConfigurationService configurationService,
         ConfigMcpSyncService configMcpSyncService,
         RemoteSyncOrchestrator remoteSyncOrchestrator,
         VaultSessionService vaultSessionService,
@@ -41,15 +40,20 @@ public sealed class ExportViewModel : ObservableObject
     {
         _exportService = exportService;
         _profileService = profileService;
+        _configurationService = configurationService;
         _configMcpSyncService = configMcpSyncService;
         _remoteSyncOrchestrator = remoteSyncOrchestrator;
         _vaultSessionService = vaultSessionService;
         _navigationService = navigationService;
 
+        ExportPlanItems = new ObservableCollection<ExportPlanListItem>();
+
         ExportCommand = new RelayCommand(ExportAsync, CanExport);
         RemoteSyncCommand = new RelayCommand(RemoteSyncAsync, CanRemoteSync);
         BackCommand = new RelayCommand(() => _navigationService.GoBack());
     }
+
+    public ObservableCollection<ExportPlanListItem> ExportPlanItems { get; }
 
     public string BaseDisplayName
     {
@@ -69,36 +73,6 @@ public sealed class ExportViewModel : ObservableObject
     }
 
     public bool IsLocalBase => !IsRemoteBase;
-
-    public bool ExportConfiguration
-    {
-        get => _exportConfiguration;
-        set => SetProperty(ref _exportConfiguration, value);
-    }
-
-    public bool ExportAllExtensions
-    {
-        get => _exportAllExtensions;
-        set
-        {
-            SetProperty(ref _exportAllExtensions, value);
-            RaisePropertyChanged(nameof(IsSelectedExtensionsEnabled));
-        }
-    }
-
-    public string SelectedExtensionsText
-    {
-        get => _selectedExtensionsText;
-        set => SetProperty(ref _selectedExtensionsText, value);
-    }
-
-    public bool IsSelectedExtensionsEnabled => !ExportAllExtensions && IsLocalBase;
-
-    public bool SaveSettingsToProfile
-    {
-        get => _saveSettingsToProfile;
-        set => SetProperty(ref _saveSettingsToProfile, value);
-    }
 
     public bool SyncToMcpAfterExport
     {
@@ -147,7 +121,8 @@ public sealed class ExportViewModel : ObservableObject
         ProgressText = string.Empty;
         StatusMessage = string.Empty;
         McpFollowUpText = string.Empty;
-        _activeJobId = null;
+        _activeJobIds.Clear();
+        ExportPlanItems.Clear();
 
         var profile = await _profileService.GetInfobaseByIdAsync(baseId);
         if (profile is null)
@@ -160,34 +135,30 @@ public sealed class ExportViewModel : ObservableObject
         }
 
         IsRemoteBase = profile.ExportLocation == ExportLocation.Remote;
-        IsMcpSyncAvailable = profile.ConfigMcpProjectId is Guid id && id != Guid.Empty;
+        var instances = await _configurationService.GetInstancesAsync(baseId);
+        IsMcpSyncAvailable = instances.Any(i => i.IsMcpLinked && i.ExportEnabled);
         SyncToMcpAfterExport = IsMcpSyncAvailable;
         RaisePropertyChanged(nameof(IsMcpSyncAvailable));
-        RaisePropertyChanged(nameof(IsSelectedExtensionsEnabled));
 
-        ExportConfiguration = profile.ExportConfiguration;
-        ExportAllExtensions = profile.ExportAllExtensions;
-        SelectedExtensionsText = string.Join(Environment.NewLine, profile.SelectedExtensions);
+        var plan = await _configurationService.BuildExportPlanAsync(baseId);
+        foreach (var item in plan.Instances)
+        {
+            ExportPlanItems.Add(new ExportPlanListItem
+            {
+                DisplayName = item.DisplayName,
+                KindLabel = item.Kind == ConfigurationKind.Base ? "основная" : "расширение",
+                DesignerName = item.DesignerName ?? "—"
+            });
+        }
+
+        if (!plan.HasWork)
+            StatusMessage = "План выгрузки пуст. Настройте конфигурации в карточке базы.";
     }
 
-    private bool CanExport() => !IsBusy && IsLocalBase && BuildPlan().HasWork;
+    private bool CanExport() => !IsBusy && IsLocalBase && ExportPlanItems.Count > 0;
 
     private bool CanRemoteSync() =>
-        !IsBusy && IsRemoteBase && ExportConfiguration && _vaultSessionService.IsUnlocked;
-
-    private ExportPlan BuildPlan()
-    {
-        var extensions = SelectedExtensionsText
-            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToList();
-
-        return new ExportPlan
-        {
-            ExportConfiguration = ExportConfiguration,
-            ExportAllExtensions = ExportAllExtensions,
-            SelectedExtensions = ExportAllExtensions ? [] : extensions
-        };
-    }
+        !IsBusy && IsRemoteBase && ExportPlanItems.Count > 0 && _vaultSessionService.IsUnlocked;
 
     private async Task RemoteSyncAsync()
     {
@@ -197,28 +168,26 @@ public sealed class ExportViewModel : ObservableObject
             return;
         }
 
-        if (!ExportConfiguration)
-        {
-            StatusMessage = "Включите выгрузку основной конфигурации.";
-            return;
-        }
-
         IsBusy = true;
-        StatusMessage = "Создание задачи sync...";
+        StatusMessage = "Создание задач sync…";
         ProgressText = string.Empty;
 
         try
         {
-            if (SaveSettingsToProfile)
-                await SaveProfileSettingsAsync(BuildPlan());
-
-            var job = await _remoteSyncOrchestrator.RequestSyncAsync(
+            var jobs = await _remoteSyncOrchestrator.RequestSyncAsync(
                 _baseId,
                 SyncToMcpAfterExport && IsMcpSyncAvailable);
-            _activeJobId = job.Id;
-            StatusMessage = "Задача создана, ожидание Передатчика на RDP…";
 
-            await PollJobUntilDoneAsync(job.Id);
+            _activeJobIds.Clear();
+            _activeJobIds.AddRange(jobs.Select(j => j.Id));
+            StatusMessage = $"Создано задач: {jobs.Count}. Ожидание Передатчика на RDP…";
+
+            foreach (var job in jobs)
+                await PollJobUntilDoneAsync(job.Id);
+
+            StatusMessage = "Синхронизация с RDP завершена.";
+            if (SyncToMcpAfterExport && IsMcpSyncAvailable)
+                McpFollowUpText = "MCP sync выполнен на Hub после доставки (если receiver был активен).";
         }
         catch (Exception ex)
         {
@@ -227,7 +196,7 @@ public sealed class ExportViewModel : ObservableObject
         finally
         {
             IsBusy = false;
-            _activeJobId = null;
+            _activeJobIds.Clear();
         }
     }
 
@@ -247,13 +216,7 @@ public sealed class ExportViewModel : ObservableObject
             ProgressText = FormatRemoteSyncProgress(job, progress);
 
             if (job.Status == SyncJobStatus.Completed)
-            {
-                StatusMessage = "Синхронизация с RDP завершена.";
-                ProgressText = progress?.Message ?? ProgressText;
-                if (job.SyncMcpAfterComplete && IsMcpSyncAvailable)
-                    McpFollowUpText = "MCP sync выполнен на Hub после доставки (если receiver был активен).";
                 return;
-            }
 
             if (job.Status is SyncJobStatus.Failed or SyncJobStatus.Cancelled)
             {
@@ -340,28 +303,12 @@ public sealed class ExportViewModel : ObservableObject
 
     private async Task ExportAsync()
     {
-        var plan = BuildPlan();
-        if (!plan.HasWork)
-        {
-            StatusMessage = "Отметьте хотя бы один тип выгрузки.";
-            return;
-        }
-
-        if (!ExportAllExtensions && plan.SelectedExtensions.Count == 0 && !ExportConfiguration)
-        {
-            StatusMessage = "Укажите имена расширений или включите «Все расширения».";
-            return;
-        }
-
         IsBusy = true;
         StatusMessage = "Запуск выгрузки...";
         ProgressText = string.Empty;
 
         try
         {
-            if (SaveSettingsToProfile)
-                await SaveProfileSettingsAsync(plan);
-
             var progress = new Progress<ExportProgress>(p =>
             {
                 ProgressText = string.IsNullOrWhiteSpace(p.Detail)
@@ -369,21 +316,16 @@ public sealed class ExportViewModel : ObservableObject
                     : $"{p.Stage}: {p.Detail} ({p.CompletedSteps}/{p.TotalSteps})";
             });
 
-            var result = await _exportService.ExportByIdAsync(_baseId, plan, progress);
+            var result = await _exportService.ExportByIdAsync(_baseId, planOverride: null, progress);
 
             if (result.Success)
             {
-                var details = new List<string>();
-                if (plan.ExportConfiguration)
-                    details.Add("конфигурация");
-                if (result.ExportedExtensions.Count > 0)
-                    details.Add($"расширения: {string.Join(", ", result.ExportedExtensions)}");
-                else if (plan.ExportAllExtensions)
-                    details.Add("все расширения");
+                var details = result.ExportedExtensions.Count > 0
+                    ? $"расширения: {string.Join(", ", result.ExportedExtensions)}"
+                    : "конфигурации из плана";
+                StatusMessage = $"Выгрузка завершена за {result.Duration:g}. {details}";
 
-                StatusMessage = $"Выгрузка завершена за {result.Duration:g}. {string.Join("; ", details)}";
-
-                if (SyncToMcpAfterExport && IsMcpSyncAvailable && plan.ExportConfiguration)
+                if (SyncToMcpAfterExport && IsMcpSyncAvailable)
                     await TrySyncToMcpAsync();
             }
             else
@@ -408,39 +350,18 @@ public sealed class ExportViewModel : ObservableObject
         }
     }
 
-    private async Task SaveProfileSettingsAsync(ExportPlan plan)
-    {
-        var profile = await _profileService.GetInfobaseByIdAsync(_baseId)
-            ?? throw new InvalidOperationException("База не найдена.");
-
-        var clients = await _profileService.GetClientsAsync();
-        var client = clients.FirstOrDefault(c => c.Id == profile.ClientId)
-            ?? throw new InvalidOperationException("Клиент не найден.");
-
-        await _profileService.AddOrUpdateInfobaseAsync(
-            client.Name,
-            profile.Name,
-            profile.PlatformPath,
-            profile.ConnectionType,
-            profile.ConnectionString,
-            profile.Username,
-            password: null,
-            plan.ExportConfiguration,
-            plan.ExportAllExtensions,
-            plan.SelectedExtensions,
-            profile.ExportFormat,
-            profile.ExportLocation,
-            profile.RemoteNodeId,
-            profile.RemoteExportPath);
-    }
-
     private async Task TrySyncToMcpAsync()
     {
         try
         {
             var syncResult = await _configMcpSyncService.SyncInfobaseAsync(_baseId);
             if (syncResult.Success)
-                StatusMessage += " Синхронизация с config-mcp выполнена.";
+            {
+                var indexHint = syncResult.IndexRebuildsSucceeded > 0
+                    ? $" Индекс MCP: {syncResult.IndexRebuildsSucceeded} database."
+                    : string.Empty;
+                StatusMessage += $" Синхронизация с config-mcp выполнена.{indexHint}";
+            }
             else
                 StatusMessage += $" Синхронизация с config-mcp не выполнена: {syncResult.Message}";
 
@@ -455,4 +376,11 @@ public sealed class ExportViewModel : ObservableObject
             StatusMessage += $" Синхронизация с config-mcp: {ex.Message}";
         }
     }
+}
+
+public sealed class ExportPlanListItem
+{
+    public string DisplayName { get; init; } = string.Empty;
+    public string KindLabel { get; init; } = string.Empty;
+    public string DesignerName { get; init; } = string.Empty;
 }

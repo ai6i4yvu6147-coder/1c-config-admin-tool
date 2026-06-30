@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using ConfigAdmin.Application;
 using ConfigAdmin.Application.RemoteSync;
+using ConfigAdmin.Domain;
 using ConfigAdmin.Domain.Enums;
 using ConfigAdmin.Domain.Models;
 using ConfigAdmin.Domain.RemoteSync;
@@ -79,8 +80,20 @@ public class SyncUploadIntegrationTests
             ConnectionType = ConnectionType.File,
             ConnectionString = "C:\\Bases\\Test",
             ExportLocation = ExportLocation.Remote,
-            RemoteNodeId = nodeId,
-            ExportConfiguration = true
+            RemoteNodeId = nodeId
+        });
+
+        var instanceId = Guid.NewGuid();
+        var instanceRepo = provider.GetRequiredService<IConfigurationInstanceRepository>();
+        await instanceRepo.SaveAsync(new ConfigurationInstance
+        {
+            Id = instanceId,
+            InfobaseId = infobaseId,
+            TemplateId = ConfigurationTemplateIds.SystemBaseTemplateId,
+            Kind = ConfigurationKind.Base,
+            DisplayName = "Основная конфигурация",
+            ExportEnabled = true,
+            SortOrder = 0
         });
 
         var syncJobRepo = provider.GetRequiredService<ISyncJobRepository>();
@@ -89,6 +102,7 @@ public class SyncUploadIntegrationTests
             Id = jobId,
             InfobaseId = infobaseId,
             RemoteNodeId = nodeId,
+            ConfigurationInstanceId = instanceId,
             Status = SyncJobStatus.Claimed,
             RequestedAt = DateTimeOffset.UtcNow
         });

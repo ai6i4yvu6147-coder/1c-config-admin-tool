@@ -3,6 +3,7 @@ using ConfigAdmin.Domain.Models;
 using ConfigAdmin.Domain.RemoteSync;
 using ConfigAdmin.Domain.Repositories;
 using ConfigAdmin.Domain.Security;
+using ConfigAdmin.Application.Services;
 
 namespace ConfigAdmin.Application.RemoteSync;
 
@@ -11,6 +12,8 @@ public sealed class RemoteSyncOrchestrator
     private readonly ISyncJobRepository _syncJobRepository;
     private readonly IInfobaseRepository _infobaseRepository;
     private readonly IRemoteNodeRepository _remoteNodeRepository;
+    private readonly IConfigurationInstanceRepository _instanceRepository;
+    private readonly InfobaseConfigurationService _configurationService;
     private readonly ISecretVault _secretVault;
     private readonly SyncJobProgressStore _progressStore;
 
@@ -18,17 +21,24 @@ public sealed class RemoteSyncOrchestrator
         ISyncJobRepository syncJobRepository,
         IInfobaseRepository infobaseRepository,
         IRemoteNodeRepository remoteNodeRepository,
+        IConfigurationInstanceRepository instanceRepository,
+        InfobaseConfigurationService configurationService,
         ISecretVault secretVault,
         SyncJobProgressStore progressStore)
     {
         _syncJobRepository = syncJobRepository;
         _infobaseRepository = infobaseRepository;
         _remoteNodeRepository = remoteNodeRepository;
+        _instanceRepository = instanceRepository;
+        _configurationService = configurationService;
         _secretVault = secretVault;
         _progressStore = progressStore;
     }
 
-    public async Task<SyncJobProfile> RequestSyncAsync(Guid infobaseId, bool syncMcpAfterComplete, CancellationToken ct = default)
+    public async Task<IReadOnlyList<SyncJobProfile>> RequestSyncAsync(
+        Guid infobaseId,
+        bool syncMcpAfterComplete,
+        CancellationToken ct = default)
     {
         if (!_secretVault.IsUnlocked)
             throw new InvalidOperationException("Разблокируйте vault перед синхронизацией с RDP.");
@@ -60,21 +70,29 @@ public sealed class RemoteSyncOrchestrator
         if (active is not null)
             throw new InvalidOperationException("Синхронизация уже выполняется для этой базы.");
 
-        if (!profile.ExportConfiguration)
-            throw new InvalidOperationException("Для Remote sync включите выгрузку основной конфигурации.");
+        var plan = await _configurationService.BuildExportPlanAsync(infobaseId, ct);
+        if (!plan.HasWork)
+            throw new InvalidOperationException("План выгрузки пуст — включите конфигурации на базе.");
 
-        var job = new SyncJobProfile
+        var jobs = new List<SyncJobProfile>();
+        foreach (var instancePlan in plan.Instances)
         {
-            Id = Guid.NewGuid(),
-            InfobaseId = infobaseId,
-            RemoteNodeId = nodeId,
-            Status = SyncJobStatus.Pending,
-            RequestedAt = DateTimeOffset.UtcNow,
-            SyncMcpAfterComplete = syncMcpAfterComplete
-        };
+            var job = new SyncJobProfile
+            {
+                Id = Guid.NewGuid(),
+                InfobaseId = infobaseId,
+                RemoteNodeId = nodeId,
+                ConfigurationInstanceId = instancePlan.InstanceId,
+                Status = SyncJobStatus.Pending,
+                RequestedAt = DateTimeOffset.UtcNow,
+                SyncMcpAfterComplete = syncMcpAfterComplete
+            };
 
-        await _syncJobRepository.SaveAsync(job, ct);
-        return job;
+            await _syncJobRepository.SaveAsync(job, ct);
+            jobs.Add(job);
+        }
+
+        return jobs;
     }
 
     public async Task<SyncJobProfile?> GetJobAsync(Guid jobId, CancellationToken ct = default) =>
@@ -90,6 +108,13 @@ public sealed class RemoteSyncOrchestrator
     {
         var profile = await _infobaseRepository.GetByIdAsync(job.InfobaseId, ct);
         if (profile is null)
+            return null;
+
+        if (job.ConfigurationInstanceId is not Guid instanceId)
+            return null;
+
+        var instance = await _instanceRepository.GetByIdAsync(instanceId, ct);
+        if (instance is null)
             return null;
 
         byte[]? encryptedPassword = null;
@@ -111,11 +136,14 @@ public sealed class RemoteSyncOrchestrator
             MaxChunkSizeBytes = SyncUploadSessionStore.DefaultChunkSizeBytes,
             Export = new ExportJobSpec
             {
+                InstanceId = instance.Id,
+                Kind = instance.Kind,
+                DisplayName = instance.DisplayName,
+                DesignerName = instance.DesignerName,
                 PlatformPath = profile.PlatformPath,
                 ConnectionType = profile.ConnectionType,
                 ConnectionString = profile.ConnectionString,
                 Username = profile.Username,
-                ExportConfiguration = profile.ExportConfiguration,
                 ExportFormat = profile.ExportFormat
             },
             EncryptedConnectionPassword = encryptedPassword

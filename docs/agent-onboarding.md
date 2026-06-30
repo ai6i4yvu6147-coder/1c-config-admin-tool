@@ -39,5 +39,5 @@ Runtime-данные **не** в репозитории: `%AppData%\ConfigAdmin\
 - CLI: [`cli.md`](cli.md)
 - SQLite: [`database.md`](database.md)
 - Backlog: [`todo.md`](todo.md)
-- Admin Hub (этот модуль): [`admin-hub/integration.md`](admin-hub/integration.md)
+- Admin Hub (MCP instance-level + H6): [`admin-hub/integration.md`](admin-hub/integration.md) — **E2E расширения ✅ 2026-06-30**
 - Remote Sync: [`remote-sync/README.md`](remote-sync/README.md) — **R-Ping готово**; статус: [`remote-sync/status.md`](remote-sync/status.md)

@@ -25,7 +25,9 @@
 | `clients` | Клиент: id, name, comment, export_root_path |
 | `projects` | Hub-проект: id, client_id, name, active |
 | `tool_instances` | Managed tool: module_id (unique), root_path, enabled |
-| `infobases` | База 1С: подключение, platform_path, план выгрузки, last_export_*, project_id, config_mcp_project_id (R1; **целевое:** `config_mcp_project_id` на `clients`) |
+| `infobases` | База 1С: подключение, platform_path, план выгрузки, last_export_*, project_id, config_mcp_project_id (legacy R1) |
+| `configuration_instances` | План выгрузки per infobase; MCP: `config_mcp_project_id`, `config_mcp_database_id` |
+| `configuration_exports` | Артефакт выгрузки (instance × время); id → `infobaseId` в config-mcp fragment |
 | `export_runs` | Журнал запусков выгрузки (включая meta_json_path) |
 | `vault_meta` | Salt и verifier мастер-пароля (не сам пароль) |
 | `remote_nodes` | RDP-узел: pairing verifier, hub URL, last_seen, enabled |

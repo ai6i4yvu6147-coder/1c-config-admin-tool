@@ -6,93 +6,153 @@
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                 <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <Button Content="Обновить" Command="{Binding RefreshCommand}" Margin="16,0,8,0" Padding="10,4" />
-                <Button Content="Каталог выгрузки" Command="{Binding OpenOutputFolderCommand}" Margin="0,0,8,0" Padding="10,4" />
-                <Button Content="Артефакты запуска" Command="{Binding OpenRunArtifactsCommand}" Margin="0,0,8,0" Padding="10,4" />
-                <Button Content="Out-файл шага" Command="{Binding OpenStepOutCommand}" Margin="0,0,8,0" Padding="10,4" />
-                <Button Content="Meta JSON" Command="{Binding OpenMetaCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="Назад" Command="{Binding BackCommand}" Padding="10,4" />
             </StackPanel>
         </StackPanel>
 
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="2*" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="120" />
-            </Grid.RowDefinitions>
+        <TabControl SelectedIndex="{Binding SelectedTabIndex}">
+            <TabItem Header="Выгрузки">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="Каталог выгрузки" Command="{Binding OpenOutputFolderCommand}" Margin="0,0,8,0" Padding="10,4" />
+                        <Button Content="Артефакты запуска" Command="{Binding OpenRunArtifactsCommand}" Margin="0,0,8,0" Padding="10,4" />
+                        <Button Content="Out-файл шага" Command="{Binding OpenStepOutCommand}" Margin="0,0,8,0" Padding="10,4" />
+                        <Button Content="Meta JSON" Command="{Binding OpenMetaCommand}" Padding="10,4" />
+                    </StackPanel>
 
-            <DataGrid Grid.Row="0"
-                      ItemsSource="{Binding Runs}"
-                      SelectedItem="{Binding SelectedRun}"
-                      AutoGenerateColumns="False"
-                      IsReadOnly="True"
-                      CanUserAddRows="False">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Начало" Binding="{Binding StartedAt}" Width="140" />
-                    <DataGridTextColumn Header="База" Binding="{Binding BaseDisplayName}" Width="160" />
-                    <DataGridTextColumn Header="Команда" Binding="{Binding CommandPreview}" Width="200">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="ToolTip" Value="{Binding CommandMasked}" />
-                                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-                    <DataGridCheckBoxColumn Header="OK" Binding="{Binding Success}" Width="40" />
-                    <DataGridTextColumn Header="Код" Binding="{Binding ExitCode}" Width="45" />
-                    <DataGridTextColumn Header="мс" Binding="{Binding DurationMs}" Width="70" />
-                    <DataGridTextColumn Header="Ошибка" Binding="{Binding ErrorMessage}" Width="*">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="TextWrapping" Value="Wrap" />
-                                <Setter Property="ToolTip" Value="{Binding ErrorMessage}" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-                </DataGrid.Columns>
-            </DataGrid>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="2*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="120" />
+                        </Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="1"
-                       Margin="0,12,0,4"
-                       Text="Шаги выбранного запуска"
-                       FontWeight="SemiBold" />
+                        <DataGrid Grid.Row="0"
+                                  ItemsSource="{Binding Runs}"
+                                  SelectedItem="{Binding SelectedRun}"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  CanUserAddRows="False">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Начало" Binding="{Binding StartedAt}" Width="140" />
+                                <DataGridTextColumn Header="База" Binding="{Binding BaseDisplayName}" Width="160" />
+                                <DataGridTextColumn Header="Команда" Binding="{Binding CommandPreview}" Width="200">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="ToolTip" Value="{Binding CommandMasked}" />
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridCheckBoxColumn Header="OK" Binding="{Binding Success}" Width="40" />
+                                <DataGridTextColumn Header="Код" Binding="{Binding ExitCode}" Width="45" />
+                                <DataGridTextColumn Header="мс" Binding="{Binding DurationMs}" Width="70" />
+                                <DataGridTextColumn Header="Ошибка" Binding="{Binding ErrorMessage}" Width="*">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="TextWrapping" Value="Wrap" />
+                                            <Setter Property="ToolTip" Value="{Binding ErrorMessage}" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
 
-            <DataGrid Grid.Row="2"
-                      ItemsSource="{Binding Steps}"
-                      SelectedItem="{Binding SelectedStep}"
-                      AutoGenerateColumns="False"
-                      IsReadOnly="True"
-                      CanUserAddRows="False">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Шаг" Binding="{Binding StepName}" Width="140" />
-                    <DataGridCheckBoxColumn Header="OK" Binding="{Binding Success}" Width="40" />
-                    <DataGridTextColumn Header="Код" Binding="{Binding ExitCode}" Width="45" />
-                    <DataGridTextColumn Header="мс" Binding="{Binding DurationMs}" Width="70" />
-                    <DataGridTextColumn Header="Ошибка" Binding="{Binding DisplayError}" Width="*">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="TextWrapping" Value="Wrap" />
-                                <Setter Property="ToolTip" Value="{Binding DisplayError}" />
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-                </DataGrid.Columns>
-            </DataGrid>
+                        <TextBlock Grid.Row="1"
+                                   Margin="0,12,0,4"
+                                   Text="Шаги выбранного запуска"
+                                   FontWeight="SemiBold" />
 
-            <TextBlock Grid.Row="3"
-                       Margin="0,8,0,4"
-                       Text="Текст ошибки / Out выбранного шага"
-                       FontWeight="SemiBold" />
+                        <DataGrid Grid.Row="2"
+                                  ItemsSource="{Binding Steps}"
+                                  SelectedItem="{Binding SelectedStep}"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  CanUserAddRows="False">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Шаг" Binding="{Binding StepName}" Width="140" />
+                                <DataGridCheckBoxColumn Header="OK" Binding="{Binding Success}" Width="40" />
+                                <DataGridTextColumn Header="Код" Binding="{Binding ExitCode}" Width="45" />
+                                <DataGridTextColumn Header="мс" Binding="{Binding DurationMs}" Width="70" />
+                                <DataGridTextColumn Header="Ошибка" Binding="{Binding DisplayError}" Width="*">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="TextWrapping" Value="Wrap" />
+                                            <Setter Property="ToolTip" Value="{Binding DisplayError}" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
 
-            <TextBox Grid.Row="4"
-                     Text="{Binding StepDetailText, Mode=OneWay}"
-                     IsReadOnly="True"
-                     TextWrapping="Wrap"
-                     VerticalScrollBarVisibility="Auto"
-                     FontFamily="Consolas"
-                     FontSize="12" />
-        </Grid>
+                        <TextBlock Grid.Row="3"
+                                   Margin="0,8,0,4"
+                                   Text="Текст ошибки / Out выбранного шага (можно копировать)"
+                                   FontWeight="SemiBold" />
+
+                        <TextBox Grid.Row="4"
+                                 Text="{Binding StepDetailText, Mode=OneWay}"
+                                 IsReadOnly="True"
+                                 TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto"
+                                 FontFamily="Consolas"
+                                 FontSize="12" />
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="События">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <TextBlock Text="{Binding AppLogFileHint}" Foreground="Gray" TextWrapping="Wrap" Margin="0,0,0,4" />
+                        <Button Content="Открыть каталог логов" Command="{Binding OpenAppLogFileCommand}" Padding="10,4" HorizontalAlignment="Left" />
+                    </StackPanel>
+
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="2*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <DataGrid Grid.Row="0"
+                                  ItemsSource="{Binding AppEvents}"
+                                  SelectedItem="{Binding SelectedAppEvent}"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  CanUserAddRows="False">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Время" Binding="{Binding Timestamp, StringFormat=HH:mm:ss}" Width="80" />
+                                <DataGridTextColumn Header="Уровень" Binding="{Binding LevelLabel}" Width="60" />
+                                <DataGridTextColumn Header="Источник" Binding="{Binding Source}" Width="100" />
+                                <DataGridTextColumn Header="Сообщение" Binding="{Binding Message}" Width="*">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="TextWrapping" Value="Wrap" />
+                                            <Setter Property="ToolTip" Value="{Binding DisplayText}" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <TextBlock Grid.Row="1"
+                                   Margin="0,8,0,4"
+                                   Text="Полный текст события (можно копировать)"
+                                   FontWeight="SemiBold" />
+
+                        <TextBox Grid.Row="2"
+                                 Text="{Binding AppEventDetailText, Mode=OneWay}"
+                                 IsReadOnly="True"
+                                 TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto"
+                                 FontFamily="Consolas"
+                                 FontSize="12" />
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
     </DockPanel>
 </UserControl>

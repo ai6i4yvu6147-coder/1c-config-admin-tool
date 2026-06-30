@@ -61,4 +61,7 @@ public sealed class ManagedToolRegistryService
     }
 
     public string ResolveCliPath(string rootPath) => _manifestReader.ResolveCliPath(rootPath);
+
+    public static string ResolveProjectsJsonPath(string rootPath) =>
+        Path.Combine(rootPath.Trim(), "projects.json");
 }

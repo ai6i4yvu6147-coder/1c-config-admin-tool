@@ -1,4 +1,4 @@
-using System.Text.Json;
+using ConfigAdmin.Application.Services;
 using ConfigAdmin.Domain.Enums;
 using ConfigAdmin.Domain.Integration;
 using ConfigAdmin.Domain.Models;
@@ -8,6 +8,7 @@ using ConfigAdmin.Domain.Services;
 using ConfigAdmin.Infrastructure.FileSystem;
 using ConfigAdmin.Integration.OneC;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace ConfigAdmin.Application.Export;
 
@@ -16,6 +17,8 @@ public sealed class ExportOrchestrator : IExportOrchestrator
     private readonly IInfobaseRepository _infobaseRepository;
     private readonly IClientRepository _clientRepository;
     private readonly IExportRunRepository _exportRunRepository;
+    private readonly IConfigurationExportRepository _exportRepository;
+    private readonly InfobaseConfigurationService _configurationService;
     private readonly ISecretVault _secretVault;
     private readonly IOneCCliAdapter _cliAdapter;
     private readonly IExportPathBuilder _pathBuilder;
@@ -27,6 +30,8 @@ public sealed class ExportOrchestrator : IExportOrchestrator
         IInfobaseRepository infobaseRepository,
         IClientRepository clientRepository,
         IExportRunRepository exportRunRepository,
+        IConfigurationExportRepository exportRepository,
+        InfobaseConfigurationService configurationService,
         ISecretVault secretVault,
         IOneCCliAdapter cliAdapter,
         IExportPathBuilder pathBuilder,
@@ -37,6 +42,8 @@ public sealed class ExportOrchestrator : IExportOrchestrator
         _infobaseRepository = infobaseRepository;
         _clientRepository = clientRepository;
         _exportRunRepository = exportRunRepository;
+        _exportRepository = exportRepository;
+        _configurationService = configurationService;
         _secretVault = secretVault;
         _cliAdapter = cliAdapter;
         _pathBuilder = pathBuilder;
@@ -47,7 +54,7 @@ public sealed class ExportOrchestrator : IExportOrchestrator
 
     public async Task<ExportResult> ExportBaseAsync(
         Guid infobaseId,
-        ExportPlan? planOverride = null,
+        InstanceExportPlan? planOverride = null,
         IProgress<ExportProgress>? progress = null,
         CancellationToken ct = default)
     {
@@ -70,7 +77,7 @@ public sealed class ExportOrchestrator : IExportOrchestrator
             client = await _clientRepository.GetByIdAsync(profile.ClientId, ct)
                 ?? throw new InvalidOperationException($"Клиент {profile.ClientId} не найден.");
 
-            var plan = planOverride ?? ExportPlan.FromProfile(profile);
+            var plan = planOverride ?? await _configurationService.BuildExportPlanAsync(infobaseId, ct);
             if (!plan.HasWork)
                 throw new InvalidOperationException("План выгрузки не содержит шагов.");
 
@@ -96,32 +103,41 @@ public sealed class ExportOrchestrator : IExportOrchestrator
             tempPath = _pathBuilder.CreateTempExportDirectory(client.ExportRootPath, client.Name, profile.Name);
             baseDir = _pathBuilder.GetBaseExportDirectory(client.ExportRootPath, client.Name, profile.Name);
 
-            var totalSteps = CountSteps(plan);
+            var totalSteps = plan.Instances.Count;
             var completed = 0;
             var exportedExtensions = new List<string>();
             var hasFailure = false;
-            var fatalFailure = false;
 
-            if (plan.ExportConfiguration)
+            foreach (var instancePlan in plan.Instances)
             {
+                ct.ThrowIfCancellationRequested();
+
+                var stage = instancePlan.Kind == ConfigurationKind.Base
+                    ? "Выгрузка основной конфигурации"
+                    : "Выгрузка расширения";
+
                 progress?.Report(new ExportProgress
                 {
-                    Stage = "Выгрузка основной конфигурации",
+                    Stage = stage,
+                    Detail = instancePlan.DisplayName,
                     CompletedSteps = completed,
                     TotalSteps = totalSteps
                 });
 
-                var configTempPath = Path.Combine(tempPath, "configuration");
-                Directory.CreateDirectory(configTempPath);
+                var stepKey = instancePlan.Kind == ConfigurationKind.Base
+                    ? "configuration"
+                    : $"extension:{instancePlan.DesignerName}";
+
+                var instanceTempPath = Path.Combine(tempPath, "instances", instancePlan.InstanceId.ToString("N"));
+                Directory.CreateDirectory(instanceTempPath);
 
                 var step = await RunDumpStepAsync(
                     profile,
                     connection,
-                    configTempPath,
-                    allExtensions: false,
-                    extensionName: null,
+                    instanceTempPath,
+                    instancePlan,
                     plan.Format,
-                    "configuration",
+                    stepKey,
                     client.Name,
                     profile.Name,
                     runId,
@@ -131,127 +147,27 @@ public sealed class ExportOrchestrator : IExportOrchestrator
                 maskedCommands = AppendCommand(maskedCommands, step.CommandMasked);
                 completed++;
 
-                if (!step.Success)
+                if (step.Success)
                 {
-                    hasFailure = true;
-                    fatalFailure = true;
-                }
-            }
+                    if (instancePlan.Kind == ConfigurationKind.Extension && instancePlan.DesignerName is not null)
+                        exportedExtensions.Add(instancePlan.DesignerName);
 
-            if (!fatalFailure && plan.ExportAllExtensions)
-            {
-                progress?.Report(new ExportProgress
-                {
-                    Stage = "Выгрузка всех расширений",
-                    CompletedSteps = completed,
-                    TotalSteps = totalSteps
-                });
-
-                var allExtensionsTempPath = Path.Combine(tempPath, "all-extensions");
-                Directory.CreateDirectory(allExtensionsTempPath);
-
-                var step = await RunDumpStepAsync(
-                    profile,
-                    connection,
-                    allExtensionsTempPath,
-                    allExtensions: true,
-                    extensionName: null,
-                    plan.Format,
-                    "all-extensions",
-                    client.Name,
-                    profile.Name,
-                    runId,
-                    ct);
-
-                steps.Add(step);
-                maskedCommands = AppendCommand(maskedCommands, step.CommandMasked);
-                completed++;
-
-                if (!step.Success)
-                    hasFailure = true;
-                else
-                    exportedExtensions.AddRange(DiscoverExtensions(allExtensionsTempPath));
-            }
-            else if (!fatalFailure && plan.SelectedExtensions.Count > 0)
-            {
-                foreach (var extensionName in plan.SelectedExtensions)
-                {
-                    ct.ThrowIfCancellationRequested();
-
-                    progress?.Report(new ExportProgress
-                    {
-                        Stage = "Выгрузка расширения",
-                        Detail = extensionName,
-                        CompletedSteps = completed,
-                        TotalSteps = totalSteps
-                    });
-
-                    var extensionTempPath = Path.Combine(tempPath, "extensions", extensionName);
-                    Directory.CreateDirectory(extensionTempPath);
-
-                    var step = await RunDumpStepAsync(
-                        profile,
-                        connection,
-                        extensionTempPath,
-                        allExtensions: false,
-                        extensionName: extensionName,
-                        plan.Format,
-                        $"extension:{extensionName}",
+                    await PublishInstanceResultAsync(
+                        client.ExportRootPath,
                         client.Name,
                         profile.Name,
-                        runId,
+                        instancePlan,
+                        instanceTempPath,
                         ct);
-
-                    steps.Add(step);
-                    maskedCommands = AppendCommand(maskedCommands, step.CommandMasked);
-                    completed++;
-
-                    if (step.Success)
-                        exportedExtensions.Add(extensionName);
-                    else
-                        hasFailure = true;
+                    await TouchExportRecordAsync(instancePlan.InstanceId, ct);
+                }
+                else
+                {
+                    hasFailure = true;
                 }
             }
 
             sw.Stop();
-
-            if (fatalFailure)
-            {
-                var error = steps.LastOrDefault(s => !s.Success)?.ErrorMessage ?? "Ошибка выгрузки.";
-                metaJsonPath = await WriteRunMetaAsync(
-                    runId, profile, client, sw.ElapsedMilliseconds, steps, exportedExtensions, ct);
-                await SaveRunLogAsync(
-                    runId, infobaseId, startedAt, false, steps, maskedCommands, baseDir, error, sw.Elapsed, metaJsonPath, ct);
-                await _infobaseRepository.UpdateLastExportAsync(infobaseId, DateTimeOffset.UtcNow, ExportStatus.Failed, ct);
-                _directoryService.SafeDelete(tempPath);
-
-                _logger.LogWarning(
-                    "Выгрузка базы {BaseName} завершилась с ошибкой (run {RunId}): {Error}",
-                    profile.Name,
-                    runId,
-                    error);
-
-                return new ExportResult
-                {
-                    Success = false,
-                    ExitCode = steps.LastOrDefault(s => !s.Success)?.ExitCode ?? -1,
-                    OutputPath = baseDir,
-                    ErrorMessage = error,
-                    Duration = sw.Elapsed,
-                    ExportedExtensions = exportedExtensions,
-                    Steps = steps
-                };
-            }
-
-            PublishExportResults(
-                client.ExportRootPath,
-                client.Name,
-                profile.Name,
-                tempPath,
-                plan,
-                steps,
-                exportedExtensions);
-
             metaJsonPath = await WriteRunMetaAsync(
                 runId, profile, client, sw.ElapsedMilliseconds, steps, exportedExtensions, ct);
 
@@ -261,7 +177,7 @@ public sealed class ExportOrchestrator : IExportOrchestrator
             var success = !hasFailure;
             var status = success
                 ? ExportStatus.Success
-                : exportedExtensions.Count > 0 || steps.Any(s => s.StepName == "configuration" && s.Success)
+                : steps.Any(s => s.Success)
                     ? ExportStatus.Partial
                     : ExportStatus.Failed;
 
@@ -348,60 +264,39 @@ public sealed class ExportOrchestrator : IExportOrchestrator
         }
     }
 
-    private void PublishExportResults(
+    private Task PublishInstanceResultAsync(
         string exportRoot,
         string clientName,
         string baseName,
-        string tempPath,
-        ExportPlan plan,
-        IReadOnlyList<ExportStepResult> steps,
-        IReadOnlyList<string> exportedExtensions)
+        ExportInstancePlan instancePlan,
+        string sourcePath,
+        CancellationToken ct)
     {
-        if (plan.ExportConfiguration)
-        {
-            var configStep = steps.FirstOrDefault(s => s.StepName == "configuration");
-            if (configStep?.Success == true)
-            {
-                var source = Path.Combine(tempPath, "configuration");
-                var target = _pathBuilder.GetConfigurationPath(exportRoot, clientName, baseName);
-                _directoryService.ReplaceDirectory(target, source);
-            }
-        }
+        var target = instancePlan.Kind == ConfigurationKind.Base
+            ? _pathBuilder.GetConfigurationPath(exportRoot, clientName, baseName)
+            : _pathBuilder.GetExtensionPath(exportRoot, clientName, baseName, instancePlan.DesignerName!);
 
-        if (plan.ExportAllExtensions)
-        {
-            var allStep = steps.FirstOrDefault(s => s.StepName == "all-extensions");
-            if (allStep?.Success == true)
-            {
-                var sourceRoot = Path.Combine(tempPath, "all-extensions");
-                foreach (var extensionDir in Directory.GetDirectories(sourceRoot))
-                {
-                    var extensionName = Path.GetFileName(extensionDir);
-                    var target = _pathBuilder.GetExtensionPath(exportRoot, clientName, baseName, extensionName);
-                    _directoryService.ReplaceDirectory(target, extensionDir);
-                }
-            }
-        }
-        else
-        {
-            foreach (var extensionName in exportedExtensions)
-            {
-                var source = Path.Combine(tempPath, "extensions", extensionName);
-                if (!Directory.Exists(source))
-                    continue;
+        _directoryService.ReplaceDirectory(target, sourcePath);
+        return Task.CompletedTask;
+    }
 
-                var target = _pathBuilder.GetExtensionPath(exportRoot, clientName, baseName, extensionName);
-                _directoryService.ReplaceDirectory(target, source);
-            }
-        }
+    private async Task TouchExportRecordAsync(Guid instanceId, CancellationToken ct)
+    {
+        await _exportRepository.MarkAllNotCurrentForInstanceAsync(instanceId, ct);
+        await _exportRepository.SaveAsync(new ConfigurationExport
+        {
+            Id = Guid.NewGuid(),
+            InstanceId = instanceId,
+            ExportedAt = DateTimeOffset.UtcNow,
+            IsCurrent = true
+        }, ct);
     }
 
     private async Task<ExportStepResult> RunDumpStepAsync(
         InfobaseProfile profile,
         ConnectionSettings connection,
         string outputPath,
-        bool allExtensions,
-        string? extensionName,
+        ExportInstancePlan instancePlan,
         ExportFormat format,
         string stepName,
         string clientName,
@@ -417,8 +312,10 @@ public sealed class ExportOrchestrator : IExportOrchestrator
         {
             Connection = connection,
             OutputPath = outputPath,
-            AllExtensions = allExtensions,
-            ExtensionName = extensionName,
+            AllExtensions = false,
+            ExtensionName = instancePlan.Kind == ConfigurationKind.Extension
+                ? instancePlan.DesignerName
+                : null,
             Format = format,
             OutLogPath = outLogPath,
             DumpResultPath = dumpResultPath
@@ -458,13 +355,6 @@ public sealed class ExportOrchestrator : IExportOrchestrator
 
         var outLogExcerpt = success ? null : OneCOutLogReader.Truncate(OneCOutLogReader.ReadText(outLogPath));
 
-        _logger.LogInformation(
-            "Шаг {StepName} завершён (run {RunId}, success={Success}, exit={ExitCode})",
-            stepName,
-            runId,
-            success,
-            exitCode);
-
         return new ExportStepResult
         {
             StepName = stepName,
@@ -478,28 +368,6 @@ public sealed class ExportOrchestrator : IExportOrchestrator
             DumpResultPath = dumpResultPath,
             OutLogExcerpt = outLogExcerpt
         };
-    }
-
-    private static int CountSteps(ExportPlan plan)
-    {
-        var count = 0;
-        if (plan.ExportConfiguration) count++;
-        if (plan.ExportAllExtensions) count++;
-        else count += plan.SelectedExtensions.Count;
-        return Math.Max(count, 1);
-    }
-
-    private static List<string> DiscoverExtensions(string extensionsPath)
-    {
-        if (!Directory.Exists(extensionsPath))
-            return [];
-
-        return Directory.GetDirectories(extensionsPath)
-            .Select(Path.GetFileName)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => name!)
-            .OrderBy(name => name)
-            .ToList();
     }
 
     private static string AppendCommand(string existing, string command) =>
@@ -526,19 +394,7 @@ public sealed class ExportOrchestrator : IExportOrchestrator
         CancellationToken ct)
     {
         var metaPath = _runArtifactPathBuilder.GetMetaJsonPath(client.Name, profile.Name, runId);
-        var metaJson = BuildMetaJson(profile, client, runId, durationMs, steps, exportedExtensions);
-        await File.WriteAllTextAsync(metaPath, metaJson, ct);
-        return metaPath;
-    }
-
-    private static string BuildMetaJson(
-        InfobaseProfile profile,
-        ClientProfile client,
-        Guid runId,
-        long durationMs,
-        IReadOnlyList<ExportStepResult> steps,
-        IReadOnlyList<string> exportedExtensions) =>
-        JsonSerializer.Serialize(new
+        var metaJson = JsonSerializer.Serialize(new
         {
             RunId = runId,
             ExportedAt = DateTimeOffset.UtcNow,
@@ -560,6 +416,9 @@ public sealed class ExportOrchestrator : IExportOrchestrator
             }),
             ExportedExtensions = exportedExtensions
         }, new JsonSerializerOptions { WriteIndented = true });
+        await File.WriteAllTextAsync(metaPath, metaJson, ct);
+        return metaPath;
+    }
 
     private async Task SaveRunLogAsync(
         Guid runId,

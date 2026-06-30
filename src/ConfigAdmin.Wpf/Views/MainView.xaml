@@ -5,32 +5,60 @@
         <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                 <Button Content="Добавить клиента" Command="{Binding AddClientCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Редактировать клиента" Command="{Binding EditClientCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="Добавить базу" Command="{Binding AddBaseCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="Редактировать базу" Command="{Binding EditBaseCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="Выгрузить" Command="{Binding ExportCommand}" Margin="0,0,8,0" Padding="10,4" FontWeight="SemiBold" />
-                <Button Content="Конфигуратор" Command="{Binding OpenConfiguratorCommand}" Margin="0,0,8,0" Padding="10,4" />
-                <Button Content="Открыть каталог" Command="{Binding OpenFolderCommand}" Margin="0,0,8,0" Padding="10,4" />
-                <Button Content="Логи" Command="{Binding OpenLogsCommand}" Margin="0,0,8,0" Padding="10,4" />
-                <Button Content="Журнал всех баз" Command="{Binding OpenAllLogsCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Шаблоны" Command="{Binding OpenTemplatesCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="MCP" Command="{Binding OpenMcpCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="RDP-узлы" Command="{Binding OpenRemoteNodesCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="Обновить" Command="{Binding RefreshCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="Заблокировать" Command="{Binding LockCommand}" Padding="10,4" />
             </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <Button Content="Конфигуратор" Command="{Binding OpenConfiguratorCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Открыть каталог" Command="{Binding OpenFolderCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Логи" Command="{Binding OpenLogsCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Журнал всех баз" Command="{Binding OpenAllLogsCommand}" Padding="10,4" />
+            </StackPanel>
             <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="Gray" />
         </StackPanel>
 
-        <DataGrid ItemsSource="{Binding Bases}"
-                  SelectedItem="{Binding SelectedBase}"
-                  AutoGenerateColumns="False"
-                  IsReadOnly="True"
-                  CanUserAddRows="False">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Клиент / База" Binding="{Binding DisplayName}" Width="200" />
-                <DataGridTextColumn Header="Тип" Binding="{Binding ConnectionType}" Width="80" />
-                <DataGridTextColumn Header="Выгрузка" Binding="{Binding ExportSettingsSummary}" Width="*" />
-                <DataGridTextColumn Header="Последняя выгрузка" Binding="{Binding StatusText}" Width="180" />
-            </DataGrid.Columns>
-        </DataGrid>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <DockPanel Grid.Column="0" Margin="0,0,12,0">
+                <TextBlock DockPanel.Dock="Top" Text="Клиенты" FontWeight="SemiBold" Margin="0,0,0,4" />
+                <DataGrid ItemsSource="{Binding Clients}"
+                          SelectedItem="{Binding SelectedClient}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          CanUserAddRows="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Имя" Binding="{Binding Name}" Width="*" />
+                        <DataGridTextColumn Header="Export root" Binding="{Binding ExportRootPath}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+
+            <DockPanel Grid.Column="1">
+                <TextBlock DockPanel.Dock="Top" Text="Инфobазы" FontWeight="SemiBold" Margin="0,0,0,4" />
+                <DataGrid ItemsSource="{Binding Bases}"
+                          SelectedItem="{Binding SelectedBase}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          CanUserAddRows="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Клиент / База" Binding="{Binding DisplayName}" Width="200" />
+                        <DataGridTextColumn Header="Тип" Binding="{Binding ConnectionType}" Width="80" />
+                        <DataGridTextColumn Header="План выгрузки" Binding="{Binding ExportSettingsSummary}" Width="*" />
+                        <DataGridTextColumn Header="Последняя выгрузка" Binding="{Binding StatusText}" Width="180" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </Grid>
     </DockPanel>
 </UserControl>

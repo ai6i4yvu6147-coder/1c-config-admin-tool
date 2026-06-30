@@ -14,6 +14,8 @@ public sealed class SyncUploadCompleter
     private readonly IClientRepository _clientRepository;
     private readonly IInfobaseRepository _infobaseRepository;
     private readonly ISyncJobRepository _syncJobRepository;
+    private readonly IConfigurationInstanceRepository _instanceRepository;
+    private readonly IConfigurationExportRepository _exportRepository;
     private readonly IExportPathBuilder _exportPathBuilder;
     private readonly AtomicDirectoryService _directoryService;
     private readonly SyncUploadSessionStore _sessionStore;
@@ -24,6 +26,8 @@ public sealed class SyncUploadCompleter
         IClientRepository clientRepository,
         IInfobaseRepository infobaseRepository,
         ISyncJobRepository syncJobRepository,
+        IConfigurationInstanceRepository instanceRepository,
+        IConfigurationExportRepository exportRepository,
         IExportPathBuilder exportPathBuilder,
         AtomicDirectoryService directoryService,
         SyncUploadSessionStore sessionStore,
@@ -33,6 +37,8 @@ public sealed class SyncUploadCompleter
         _clientRepository = clientRepository;
         _infobaseRepository = infobaseRepository;
         _syncJobRepository = syncJobRepository;
+        _instanceRepository = instanceRepository;
+        _exportRepository = exportRepository;
         _exportPathBuilder = exportPathBuilder;
         _directoryService = directoryService;
         _sessionStore = sessionStore;
@@ -74,8 +80,15 @@ public sealed class SyncUploadCompleter
             var client = await _clientRepository.GetByIdAsync(profile.ClientId, ct)
                 ?? throw new SyncUploadException("Client not found.", "JOB_NOT_FOUND", 404);
 
-            var targetPath = _exportPathBuilder.GetConfigurationPath(
-                client.ExportRootPath, client.Name, profile.Name);
+            var instance = job.ConfigurationInstanceId is Guid instanceId
+                ? await _instanceRepository.GetByIdAsync(instanceId, ct)
+                : null;
+
+            var targetPath = instance?.Kind == ConfigurationKind.Extension && instance.DesignerName is not null
+                ? _exportPathBuilder.GetExtensionPath(
+                    client.ExportRootPath, client.Name, profile.Name, instance.DesignerName)
+                : _exportPathBuilder.GetConfigurationPath(
+                    client.ExportRootPath, client.Name, profile.Name);
 
             extractTemp = Path.Combine(Path.GetDirectoryName(targetPath)!, $"sync_extract_{Guid.NewGuid():N}");
             Directory.CreateDirectory(extractTemp);
@@ -83,6 +96,18 @@ public sealed class SyncUploadCompleter
 
             _directoryService.ReplaceDirectory(targetPath, extractTemp);
             extractTemp = null;
+
+            if (instance is not null)
+            {
+                await _exportRepository.MarkAllNotCurrentForInstanceAsync(instance.Id, ct);
+                await _exportRepository.SaveAsync(new ConfigurationExport
+                {
+                    Id = Guid.NewGuid(),
+                    InstanceId = instance.Id,
+                    ExportedAt = DateTimeOffset.UtcNow,
+                    IsCurrent = true
+                }, ct);
+            }
 
             await _infobaseRepository.UpdateLastExportAsync(
                 profile.Id, DateTimeOffset.UtcNow, ExportStatus.Success, ct);

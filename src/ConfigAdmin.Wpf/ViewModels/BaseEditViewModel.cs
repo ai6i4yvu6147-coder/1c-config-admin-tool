@@ -16,6 +16,8 @@ public sealed class BaseEditViewModel : ObservableObject
     private readonly FileDialogService _fileDialogService;
     private readonly INavigationService _navigationService;
     private readonly RemoteNodeService _remoteNodeService;
+    private readonly ConfigurationCatalogService _catalogService;
+    private readonly InfobaseConfigurationService _configurationService;
     private readonly IExportPathBuilder _exportPathBuilder;
 
     private Guid? _editingId;
@@ -26,14 +28,14 @@ public sealed class BaseEditViewModel : ObservableObject
     private string _connectionString = string.Empty;
     private string _username = string.Empty;
     private string _password = string.Empty;
-    private bool _exportConfiguration = true;
-    private bool _exportAllExtensions;
-    private string _selectedExtensionsText = string.Empty;
     private bool _isLocalExport = true;
     private Guid? _selectedRemoteNodeId;
     private string _remoteExportPath = string.Empty;
     private string _localTargetHint = string.Empty;
     private string _statusMessage = string.Empty;
+    private Guid? _selectedTemplateToAdd;
+    private bool _suppressClientChange;
+    private int _beginSequence;
 
     public BaseEditViewModel(
         ProfileService profileService,
@@ -41,6 +43,8 @@ public sealed class BaseEditViewModel : ObservableObject
         FileDialogService fileDialogService,
         INavigationService navigationService,
         RemoteNodeService remoteNodeService,
+        ConfigurationCatalogService catalogService,
+        InfobaseConfigurationService configurationService,
         IExportPathBuilder exportPathBuilder)
     {
         _profileService = profileService;
@@ -48,20 +52,47 @@ public sealed class BaseEditViewModel : ObservableObject
         _fileDialogService = fileDialogService;
         _navigationService = navigationService;
         _remoteNodeService = remoteNodeService;
+        _catalogService = catalogService;
+        _configurationService = configurationService;
         _exportPathBuilder = exportPathBuilder;
 
         Clients = new ObservableCollection<string>();
         RemoteNodes = new ObservableCollection<RemoteNodeOption>();
+        Instances = new ObservableCollection<InstanceEditItem>();
+        AvailableTemplates = new ObservableCollection<ConfigurationTemplateListItem>();
 
         SaveCommand = new RelayCommand(SaveAsync);
         TestConnectionCommand = new RelayCommand(TestConnectionAsync);
         BrowsePlatformCommand = new RelayCommand(BrowsePlatform);
         BackCommand = new RelayCommand(() => _navigationService.GoBack());
+        AddTemplateInstanceCommand = new RelayCommand(AddTemplateInstance);
+        AddLocalInstanceCommand = new RelayCommand(AddLocalInstance);
+        RemoveInstanceCommand = new RelayCommand(RemoveSelectedInstance, () => SelectedInstance is { IsBase: false });
         _ = LoadClientsAsync();
     }
 
     public ObservableCollection<string> Clients { get; }
     public ObservableCollection<RemoteNodeOption> RemoteNodes { get; }
+    public ObservableCollection<InstanceEditItem> Instances { get; }
+    public ObservableCollection<ConfigurationTemplateListItem> AvailableTemplates { get; }
+
+    public InstanceEditItem? SelectedInstance
+    {
+        get => _selectedInstance;
+        set
+        {
+            SetProperty(ref _selectedInstance, value);
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
+    private InstanceEditItem? _selectedInstance;
+
+    public Guid? SelectedTemplateToAdd
+    {
+        get => _selectedTemplateToAdd;
+        set => SetProperty(ref _selectedTemplateToAdd, value);
+    }
 
     public string SelectedClient
     {
@@ -69,7 +100,8 @@ public sealed class BaseEditViewModel : ObservableObject
         set
         {
             SetProperty(ref _selectedClient, value);
-            _ = LoadRemoteNodesForClientAsync();
+            if (!_suppressClientChange)
+                _ = LoadRemoteNodesForClientAsync();
         }
     }
 
@@ -112,30 +144,6 @@ public sealed class BaseEditViewModel : ObservableObject
         get => _password;
         set => SetProperty(ref _password, value);
     }
-
-    public bool ExportConfiguration
-    {
-        get => _exportConfiguration;
-        set => SetProperty(ref _exportConfiguration, value);
-    }
-
-    public bool ExportAllExtensions
-    {
-        get => _exportAllExtensions;
-        set
-        {
-            SetProperty(ref _exportAllExtensions, value);
-            RaisePropertyChanged(nameof(IsSelectedExtensionsEnabled));
-        }
-    }
-
-    public string SelectedExtensionsText
-    {
-        get => _selectedExtensionsText;
-        set => SetProperty(ref _selectedExtensionsText, value);
-    }
-
-    public bool IsSelectedExtensionsEnabled => !ExportAllExtensions;
 
     public bool IsLocalExport
     {
@@ -183,47 +191,127 @@ public sealed class BaseEditViewModel : ObservableObject
     public RelayCommand TestConnectionCommand { get; }
     public RelayCommand BrowsePlatformCommand { get; }
     public RelayCommand BackCommand { get; }
+    public RelayCommand AddTemplateInstanceCommand { get; }
+    public RelayCommand AddLocalInstanceCommand { get; }
+    public RelayCommand RemoveInstanceCommand { get; }
 
     public async void BeginCreate()
     {
-        _editingId = null;
-        ResetFields();
-        await LoadClientsAsync();
+        var seq = Interlocked.Increment(ref _beginSequence);
+        try
+        {
+            _editingId = null;
+            ResetFields();
+            await LoadClientsAsync();
+            if (seq != _beginSequence)
+                return;
 
-        if (Clients.Count == 0)
-            StatusMessage = "Сначала добавьте клиента (кнопка «Добавить клиента» на главном экране).";
+            await LoadTemplatesAsync();
+            if (seq != _beginSequence)
+                return;
 
-        RaisePropertyChanged(nameof(Title));
+            Instances.Clear();
+
+            if (Clients.Count == 0)
+                StatusMessage = "Сначала добавьте клиента (кнопка «Добавить клиента» на главном экране).";
+
+            RaisePropertyChanged(nameof(Title));
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = ex.Message;
+        }
     }
 
     public async void BeginEdit(Guid id)
     {
-        _editingId = id;
-        var profile = await _profileService.GetInfobaseByIdAsync(id);
-        if (profile is null)
-            return;
+        var seq = Interlocked.Increment(ref _beginSequence);
+        try
+        {
+            _editingId = id;
+            var profile = await _profileService.GetInfobaseByIdAsync(id);
+            if (profile is null)
+            {
+                StatusMessage = "База не найдена.";
+                return;
+            }
 
-        await LoadClientsAsync();
-        var clients = await _profileService.GetClientsAsync();
-        var client = clients.FirstOrDefault(c => c.Id == profile.ClientId);
+            if (seq != _beginSequence)
+                return;
 
-        SelectedClient = client?.Name ?? string.Empty;
-        Name = profile.Name;
-        PlatformPath = profile.PlatformPath;
-        IsServerConnection = profile.ConnectionType == ConnectionType.Server;
-        ConnectionString = profile.ConnectionString;
-        Username = profile.Username ?? string.Empty;
-        Password = string.Empty;
-        ExportConfiguration = profile.ExportConfiguration;
-        ExportAllExtensions = profile.ExportAllExtensions;
-        SelectedExtensionsText = string.Join(Environment.NewLine, profile.SelectedExtensions);
-        IsLocalExport = profile.ExportLocation == ExportLocation.Local;
-        SelectedRemoteNodeId = profile.RemoteNodeId;
-        RemoteExportPath = profile.RemoteExportPath ?? string.Empty;
-        await LoadRemoteNodesForClientAsync();
-        UpdateLocalTargetHint();
-        StatusMessage = string.Empty;
-        RaisePropertyChanged(nameof(Title));
+            await LoadClientsAsync();
+            await LoadTemplatesAsync();
+            if (seq != _beginSequence)
+                return;
+
+            var clients = await _profileService.GetClientsAsync();
+            var client = clients.FirstOrDefault(c => c.Id == profile.ClientId);
+
+            _suppressClientChange = true;
+            SelectedClient = client?.Name ?? string.Empty;
+            _suppressClientChange = false;
+
+            Name = profile.Name;
+            PlatformPath = profile.PlatformPath;
+            IsServerConnection = profile.ConnectionType == ConnectionType.Server;
+            ConnectionString = profile.ConnectionString;
+            Username = profile.Username ?? string.Empty;
+            Password = string.Empty;
+            IsLocalExport = profile.ExportLocation == ExportLocation.Local;
+            SelectedRemoteNodeId = profile.RemoteNodeId;
+            RemoteExportPath = profile.RemoteExportPath ?? string.Empty;
+            await LoadRemoteNodesForClientAsync();
+            if (seq != _beginSequence)
+                return;
+
+            await LoadInstancesAsync(id);
+            UpdateLocalTargetHint();
+            StatusMessage = string.Empty;
+            RaisePropertyChanged(nameof(Title));
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = ex.Message;
+        }
+    }
+
+    private async Task LoadInstancesAsync(Guid infobaseId)
+    {
+        Instances.Clear();
+        var instances = await _configurationService.GetInstancesAsync(infobaseId);
+        foreach (var instance in instances)
+        {
+            Instances.Add(new InstanceEditItem
+            {
+                Id = instance.Id,
+                TemplateId = instance.TemplateId,
+                Kind = instance.Kind,
+                DisplayName = instance.DisplayName,
+                DesignerName = instance.DesignerName ?? string.Empty,
+                ExportEnabled = instance.ExportEnabled
+            });
+        }
+    }
+
+    private async Task LoadTemplatesAsync()
+    {
+        AvailableTemplates.Clear();
+        foreach (var template in await _catalogService.GetTemplatesAsync())
+        {
+            if (template.Kind == ConfigurationKind.Base)
+                continue;
+
+            AvailableTemplates.Add(new ConfigurationTemplateListItem
+            {
+                Id = template.Id,
+                Name = template.Name,
+                Description = template.Description ?? string.Empty,
+                Kind = template.Kind,
+                IsSystem = template.IsSystem
+            });
+        }
+
+        SelectedTemplateToAdd = AvailableTemplates.FirstOrDefault()?.Id;
     }
 
     private async Task LoadClientsAsync()
@@ -274,14 +362,12 @@ public sealed class BaseEditViewModel : ObservableObject
         ConnectionString = string.Empty;
         Username = string.Empty;
         Password = string.Empty;
-        ExportConfiguration = true;
-        ExportAllExtensions = false;
-        SelectedExtensionsText = string.Empty;
         IsLocalExport = true;
         SelectedRemoteNodeId = null;
         RemoteExportPath = string.Empty;
         LocalTargetHint = string.Empty;
         StatusMessage = string.Empty;
+        Instances.Clear();
     }
 
     private void BrowsePlatform()
@@ -291,20 +377,68 @@ public sealed class BaseEditViewModel : ObservableObject
             PlatformPath = path;
     }
 
-    private List<string> ParseExtensions() =>
-        SelectedExtensionsText
-            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToList();
-
-    private bool ValidateExportSettings()
+    private void AddTemplateInstance()
     {
-        if (IsRemoteExport)
-            return ExportConfiguration;
+        if (SelectedTemplateToAdd is not Guid templateId)
+        {
+            StatusMessage = "Выберите шаблон.";
+            return;
+        }
 
-        if (ExportConfiguration || ExportAllExtensions)
-            return true;
+        var template = AvailableTemplates.FirstOrDefault(t => t.Id == templateId);
+        if (template is null)
+            return;
 
-        return ParseExtensions().Count > 0;
+        if (Instances.Any(i => i.TemplateId == templateId))
+        {
+            StatusMessage = "Этот шаблон уже добавлен к базе.";
+            return;
+        }
+
+        Instances.Add(new InstanceEditItem
+        {
+            Id = Guid.NewGuid(),
+            TemplateId = templateId,
+            Kind = ConfigurationKind.Extension,
+            DisplayName = template.Name,
+            ExportEnabled = true
+        });
+        StatusMessage = string.Empty;
+    }
+
+    private void AddLocalInstance()
+    {
+        Instances.Add(new InstanceEditItem
+        {
+            Id = Guid.NewGuid(),
+            Kind = ConfigurationKind.Extension,
+            ExportEnabled = true
+        });
+    }
+
+    private void RemoveSelectedInstance()
+    {
+        if (SelectedInstance is null || SelectedInstance.IsBase)
+            return;
+
+        Instances.Remove(SelectedInstance);
+        SelectedInstance = null;
+    }
+
+    private bool ValidateInstances()
+    {
+        if (!Instances.Any(i => i.ExportEnabled))
+            return false;
+
+        foreach (var item in Instances.Where(i => i.Kind == ConfigurationKind.Extension))
+        {
+            if (string.IsNullOrWhiteSpace(item.DesignerName))
+                return false;
+            if (item.IsLocal && string.IsNullOrWhiteSpace(item.DisplayName))
+                return false;
+        }
+
+        return true;
     }
 
     private async Task SaveAsync()
@@ -326,21 +460,13 @@ public sealed class BaseEditViewModel : ObservableObject
                 return;
             }
 
-            if (!ValidateExportSettings())
-            {
-                StatusMessage = IsRemoteExport
-                    ? "Для Remote sync включите выгрузку основной конфигурации."
-                    : "Укажите что выгружать: конфигурацию, все расширения или список расширений.";
-                return;
-            }
-
             if (IsRemoteExport && SelectedRemoteNodeId is null)
             {
                 StatusMessage = "Выберите RDP-узел.";
                 return;
             }
 
-            await _profileService.AddOrUpdateInfobaseAsync(
+            var profile = await _profileService.AddOrUpdateInfobaseAsync(
                 SelectedClient,
                 Name,
                 PlatformPath,
@@ -348,15 +474,48 @@ public sealed class BaseEditViewModel : ObservableObject
                 ConnectionString,
                 Username,
                 string.IsNullOrWhiteSpace(Password) ? null : Password,
-                ExportConfiguration,
-                IsRemoteExport ? false : ExportAllExtensions,
-                IsRemoteExport ? [] : ParseExtensions(),
+                exportConfiguration: true,
+                exportAllExtensions: false,
+                selectedExtensions: [],
                 exportLocation: IsRemoteExport ? ExportLocation.Remote : ExportLocation.Local,
                 remoteNodeId: IsRemoteExport ? SelectedRemoteNodeId : null,
                 remoteExportPath: IsRemoteExport && !string.IsNullOrWhiteSpace(RemoteExportPath)
                     ? RemoteExportPath
-                    : null);
+                    : null,
+                infobaseId: _editingId);
 
+            if (Instances.Count == 0)
+                await LoadInstancesAsync(profile.Id);
+
+            if (!ValidateInstances())
+            {
+                StatusMessage = "Включите хотя бы одну конфигурацию и заполните имена расширений.";
+                return;
+            }
+
+            var existingInstances = await _configurationService.GetInstancesAsync(profile.Id);
+            var mcpById = existingInstances.ToDictionary(i => i.Id);
+
+            var sort = 0;
+            var toSave = Instances.Select(item =>
+            {
+                mcpById.TryGetValue(item.Id, out var existing);
+                return new ConfigurationInstance
+                {
+                    Id = item.Id == Guid.Empty ? Guid.NewGuid() : item.Id,
+                    InfobaseId = profile.Id,
+                    TemplateId = item.TemplateId,
+                    Kind = item.Kind,
+                    DisplayName = item.IsBase ? item.DisplayName : item.DisplayName.Trim(),
+                    DesignerName = item.IsBase ? null : item.DesignerName.Trim(),
+                    ExportEnabled = item.ExportEnabled,
+                    SortOrder = item.IsBase ? 0 : ++sort,
+                    ConfigMcpProjectId = existing?.ConfigMcpProjectId,
+                    ConfigMcpDatabaseId = existing?.ConfigMcpDatabaseId
+                };
+            }).ToList();
+
+            await _configurationService.SaveInstancesAsync(profile.Id, toSave);
             _navigationService.GoBack();
         }
         catch (Exception ex)
@@ -386,9 +545,7 @@ public sealed class BaseEditViewModel : ObservableObject
                 ConnectionString,
                 Username,
                 string.IsNullOrWhiteSpace(Password) ? null : Password,
-                ExportConfiguration,
-                ExportAllExtensions,
-                ParseExtensions());
+                infobaseId: _editingId);
 
             var result = await _connectionTestService.TestAsync(profile);
             StatusMessage = result.Success

@@ -1,3 +1,4 @@
+using ConfigAdmin.Domain.Enums;
 using ConfigAdmin.Domain.Integration;
 using ConfigAdmin.Domain.Models;
 using ConfigAdmin.Domain.RemoteSync;
@@ -18,17 +19,14 @@ public sealed class RemoteConfigurationExportService
         _logger = logger;
     }
 
-    public async Task<RemoteExportResult> ExportConfigurationAsync(
+    public async Task<RemoteExportResult> ExportInstanceAsync(
         ExportJobSpec spec,
         string password,
-        string targetConfigurationPath,
+        string targetPath,
         IProgress<ExportDirectoryStats>? exportProgress = null,
         CancellationToken ct = default)
     {
-        if (!spec.ExportConfiguration)
-            return RemoteExportResult.Fail("Export configuration is disabled in job spec.");
-
-        Directory.CreateDirectory(targetConfigurationPath);
+        Directory.CreateDirectory(targetPath);
 
         var connection = new ConnectionSettings
         {
@@ -38,27 +36,15 @@ public sealed class RemoteConfigurationExportService
             Password = password
         };
 
-        var profile = new InfobaseProfile
-        {
-            PlatformPath = spec.PlatformPath,
-            ConnectionType = spec.ConnectionType,
-            ConnectionString = spec.ConnectionString,
-            Username = spec.Username
-        };
-
-        var outLogPath = Path.Combine(
-            Path.GetDirectoryName(targetConfigurationPath)!,
-            "export.out.log");
-        var dumpResultPath = Path.Combine(
-            Path.GetDirectoryName(targetConfigurationPath)!,
-            "export.dumpresult");
+        var outLogPath = Path.Combine(Path.GetDirectoryName(targetPath)!, "export.out.log");
+        var dumpResultPath = Path.Combine(Path.GetDirectoryName(targetPath)!, "export.dumpresult");
 
         var request = new DumpConfigRequest
         {
             Connection = connection,
-            OutputPath = targetConfigurationPath,
+            OutputPath = targetPath,
             AllExtensions = false,
-            ExtensionName = null,
+            ExtensionName = spec.Kind == ConfigurationKind.Extension ? spec.DesignerName : null,
             Format = spec.ExportFormat,
             OutLogPath = outLogPath,
             DumpResultPath = dumpResultPath
@@ -72,15 +58,17 @@ public sealed class RemoteConfigurationExportService
         };
 
         _logger.LogInformation(
-            "Starting remote configuration export to {Path}",
-            targetConfigurationPath);
+            "Starting remote export ({Kind}) {DisplayName} to {Path}",
+            spec.Kind,
+            spec.DisplayName,
+            targetPath);
 
         Task? monitorTask = null;
         using var monitorCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         if (exportProgress is not null)
         {
             monitorTask = ExportDirectoryMonitor.MonitorAsync(
-                targetConfigurationPath,
+                targetPath,
                 ExportDirectoryMonitor.DefaultInterval,
                 exportProgress,
                 monitorCts.Token);
@@ -102,7 +90,6 @@ public sealed class RemoteConfigurationExportService
                 }
                 catch (OperationCanceledException)
                 {
-                    // expected when export finishes
                 }
             }
         }
@@ -115,7 +102,7 @@ public sealed class RemoteConfigurationExportService
             return RemoteExportResult.Fail(error, result.ExitCode);
         }
 
-        return RemoteExportResult.Ok(targetConfigurationPath);
+        return RemoteExportResult.Ok(targetPath);
     }
 }
 

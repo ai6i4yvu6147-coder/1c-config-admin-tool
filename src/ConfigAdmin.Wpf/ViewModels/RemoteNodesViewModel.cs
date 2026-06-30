@@ -30,7 +30,7 @@ public sealed class RemoteNodeListItem
     }
 }
 
-public sealed class RemoteNodesViewModel : ObservableObject
+public sealed class RemoteNodesViewModel : ObservableObject, IRefreshOnNavigate
 {
     private readonly RemoteNodeService _remoteNodeService;
     private readonly ProfileService _profileService;

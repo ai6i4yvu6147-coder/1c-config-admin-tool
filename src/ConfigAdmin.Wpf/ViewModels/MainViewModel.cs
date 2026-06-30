@@ -6,9 +6,10 @@ using ConfigAdmin.Wpf.Services;
 
 namespace ConfigAdmin.Wpf.ViewModels;
 
-public sealed class MainViewModel : ObservableObject
+public sealed class MainViewModel : ObservableObject, IRefreshOnNavigate
 {
     private readonly ProfileService _profileService;
+    private readonly InfobaseConfigurationService _configurationService;
     private readonly INavigationService _navigationService;
     private readonly VaultSessionService _vaultSessionService;
     private readonly VaultViewModel _vaultViewModel;
@@ -17,15 +18,18 @@ public sealed class MainViewModel : ObservableObject
     private readonly ExportViewModel _exportViewModel;
     private readonly ConfigMcpViewModel _configMcpViewModel;
     private readonly RemoteNodesViewModel _remoteNodesViewModel;
+    private readonly ConfigurationTemplatesViewModel _templatesViewModel;
     private readonly LogsViewModel _logsViewModel;
     private readonly ConfiguratorLaunchService _configuratorLaunchService;
 
+    private ClientListItem? _selectedClient;
     private InfobaseListItem? _selectedBase;
     private string _statusMessage = string.Empty;
     private bool _isBusy;
 
     public MainViewModel(
         ProfileService profileService,
+        InfobaseConfigurationService configurationService,
         INavigationService navigationService,
         VaultSessionService vaultSessionService,
         VaultViewModel vaultViewModel,
@@ -34,10 +38,12 @@ public sealed class MainViewModel : ObservableObject
         ExportViewModel exportViewModel,
         ConfigMcpViewModel configMcpViewModel,
         RemoteNodesViewModel remoteNodesViewModel,
+        ConfigurationTemplatesViewModel templatesViewModel,
         LogsViewModel logsViewModel,
         ConfiguratorLaunchService configuratorLaunchService)
     {
         _profileService = profileService;
+        _configurationService = configurationService;
         _navigationService = navigationService;
         _vaultSessionService = vaultSessionService;
         _vaultViewModel = vaultViewModel;
@@ -46,12 +52,15 @@ public sealed class MainViewModel : ObservableObject
         _exportViewModel = exportViewModel;
         _configMcpViewModel = configMcpViewModel;
         _remoteNodesViewModel = remoteNodesViewModel;
+        _templatesViewModel = templatesViewModel;
         _logsViewModel = logsViewModel;
         _configuratorLaunchService = configuratorLaunchService;
 
+        Clients = new ObservableCollection<ClientListItem>();
         Bases = new ObservableCollection<InfobaseListItem>();
         RefreshCommand = new RelayCommand(RefreshAsync);
         AddClientCommand = new RelayCommand(AddClient);
+        EditClientCommand = new RelayCommand(EditClient, () => SelectedClient is not null);
         AddBaseCommand = new RelayCommand(AddBase);
         EditBaseCommand = new RelayCommand(EditBase, () => SelectedBase is not null);
         ExportCommand = new RelayCommand(Export, () => SelectedBase is not null && !IsBusy);
@@ -60,13 +69,21 @@ public sealed class MainViewModel : ObservableObject
         OpenAllLogsCommand = new RelayCommand(OpenAllLogs);
         OpenMcpCommand = new RelayCommand(OpenMcp);
         OpenRemoteNodesCommand = new RelayCommand(OpenRemoteNodes);
+        OpenTemplatesCommand = new RelayCommand(OpenTemplates);
         OpenConfiguratorCommand = new RelayCommand(OpenConfiguratorAsync, () => SelectedBase is not null);
         LockCommand = new RelayCommand(Lock);
 
         _ = RefreshAsync();
     }
 
+    public ObservableCollection<ClientListItem> Clients { get; }
     public ObservableCollection<InfobaseListItem> Bases { get; }
+
+    public ClientListItem? SelectedClient
+    {
+        get => _selectedClient;
+        set => SetProperty(ref _selectedClient, value);
+    }
 
     public InfobaseListItem? SelectedBase
     {
@@ -88,6 +105,7 @@ public sealed class MainViewModel : ObservableObject
 
     public RelayCommand RefreshCommand { get; }
     public RelayCommand AddClientCommand { get; }
+    public RelayCommand EditClientCommand { get; }
     public RelayCommand AddBaseCommand { get; }
     public RelayCommand EditBaseCommand { get; }
     public RelayCommand ExportCommand { get; }
@@ -96,6 +114,7 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand OpenAllLogsCommand { get; }
     public RelayCommand OpenMcpCommand { get; }
     public RelayCommand OpenRemoteNodesCommand { get; }
+    public RelayCommand OpenTemplatesCommand { get; }
     public RelayCommand OpenConfiguratorCommand { get; }
     public RelayCommand LockCommand { get; }
 
@@ -105,12 +124,25 @@ public sealed class MainViewModel : ObservableObject
     {
         var clients = await _profileService.GetClientsAsync();
         var clientMap = clients.ToDictionary(c => c.Id, c => c);
-        var bases = await _profileService.GetInfobasesAsync();
 
+        Clients.Clear();
+        foreach (var client in clients.OrderBy(c => c.Name))
+        {
+            Clients.Add(new ClientListItem
+            {
+                Id = client.Id,
+                Name = client.Name,
+                ExportRootPath = client.ExportRootPath,
+                Comment = client.Comment ?? string.Empty
+            });
+        }
+
+        var bases = await _profileService.GetInfobasesAsync();
         Bases.Clear();
         foreach (var profile in bases.OrderBy(b => b.Name))
         {
             clientMap.TryGetValue(profile.ClientId, out var client);
+            var instances = await _configurationService.GetInstancesAsync(profile.Id);
             Bases.Add(new InfobaseListItem
             {
                 Id = profile.Id,
@@ -119,20 +151,28 @@ public sealed class MainViewModel : ObservableObject
                 ConnectionType = profile.ConnectionType,
                 LastExportStatus = profile.LastExportStatus,
                 LastExportAt = profile.LastExportAt,
-                ExportSettingsSummary = InfobaseListItem.BuildExportSummary(
-                    profile.ExportConfiguration,
-                    profile.ExportAllExtensions,
-                    profile.SelectedExtensions)
+                ExportSettingsSummary = InfobaseConfigurationService.BuildExportSummary(instances)
             });
         }
 
-        if (Bases.Count == 0)
+        if (Clients.Count == 0 && Bases.Count == 0)
             StatusMessage = "Добавьте клиента и базу для начала работы.";
+        else
+            StatusMessage = string.Empty;
     }
 
     private void AddClient()
     {
         _clientEditViewModel.BeginCreate();
+        _navigationService.NavigateTo(_clientEditViewModel);
+    }
+
+    private void EditClient()
+    {
+        if (SelectedClient is null)
+            return;
+
+        _clientEditViewModel.BeginEdit(SelectedClient.Name);
         _navigationService.NavigateTo(_clientEditViewModel);
     }
 
@@ -204,6 +244,11 @@ public sealed class MainViewModel : ObservableObject
     private void OpenRemoteNodes()
     {
         _navigationService.NavigateTo(_remoteNodesViewModel);
+    }
+
+    private void OpenTemplates()
+    {
+        _navigationService.NavigateTo(_templatesViewModel);
     }
 
     private async Task OpenConfiguratorAsync()

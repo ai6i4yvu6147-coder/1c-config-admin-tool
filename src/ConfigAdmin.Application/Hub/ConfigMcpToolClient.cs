@@ -55,6 +55,18 @@ public sealed class ConfigMcpToolClient
         }
     }
 
+    public async Task<(ConfigMcpRebuildIndexResponse Response, JsonCliResult Raw)> RebuildIndexAsync(
+        string databaseId,
+        CancellationToken ct = default)
+    {
+        var cliPath = await _registryService.ResolveConfigMcpCliPathAsync(ct);
+        var root = (await _registryService.GetOrCreateConfigMcpInstanceAsync(ct)).RootPath;
+        return await _cliRunner.RunAndDeserializeWithRawAsync<ConfigMcpRebuildIndexResponse>(
+            cliPath,
+            BuildArgs(root, "rebuild-index", "--db-id", databaseId, "--json"),
+            ct);
+    }
+
     private static List<string> BuildArgs(string root, params string[] commandArgs)
     {
         var args = new List<string> { "--root", root };

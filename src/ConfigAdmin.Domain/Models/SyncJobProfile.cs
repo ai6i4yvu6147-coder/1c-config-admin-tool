@@ -17,4 +17,5 @@ public sealed class SyncJobProfile
     public string? ContentSha256 { get; set; }
     public string? ErrorMessage { get; set; }
     public bool SyncMcpAfterComplete { get; set; }
+    public Guid? ConfigurationInstanceId { get; set; }
 }

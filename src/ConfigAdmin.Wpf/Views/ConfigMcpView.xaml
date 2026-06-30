@@ -20,16 +20,34 @@
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                 <Button Content="Обновить статус" Command="{Binding RefreshCommand}" Padding="10,4" Margin="0,0,8,0" />
-                <Button Content="Привязать базу" Command="{Binding LinkCommand}" Padding="10,4" Margin="0,0,8,0" />
-                <Button Content="Синхронизировать выбранную" Command="{Binding SyncSelectedCommand}" Padding="10,4" Margin="0,0,8,0" FontWeight="SemiBold" />
+                <Button Content="Привязать" Command="{Binding LinkCommand}" Padding="10,4" Margin="0,0,8,0" FontWeight="SemiBold" />
+                <Button Content="Синхронизировать выбранную" Command="{Binding SyncSelectedCommand}" Padding="10,4" Margin="0,0,8,0" />
                 <Button Content="Синхронизировать все привязанные" Command="{Binding SyncAllCommand}" Padding="10,4" Margin="0,0,8,0" />
+                <Button Content="Журнал событий" Command="{Binding OpenJournalCommand}" Padding="10,4" Margin="0,0,8,0" />
                 <Button Content="Назад" Command="{Binding BackCommand}" Padding="10,4" />
             </StackPanel>
 
+            <TextBlock Text="Выберите конфигурацию (база или расширение), проект и database MCP. «Привязать» сразу пишет в projects.json — каталог выгрузки может ещё не существовать; он появится при первой выгрузке."
+                       TextWrapping="Wrap" Foreground="Gray" Margin="0,0,0,8" />
+
             <TextBlock Text="{Binding StatusSummary}" Margin="0,0,0,4" />
+            <TextBlock Text="{Binding RegistryFilePath}" Foreground="Gray" TextWrapping="Wrap" Margin="0,0,0,4" />
             <TextBlock Text="{Binding McpReadiness}" Foreground="Gray" Margin="0,0,0,4" />
-            <TextBlock Text="{Binding StatusMessage}" Foreground="Firebrick" TextWrapping="Wrap" Margin="0,0,0,4" />
-            <TextBlock Text="{Binding FollowUpText}" TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,8" />
+            <TextBlock Text="Статус (можно копировать)" FontWeight="SemiBold" Margin="0,0,0,2" />
+            <TextBox Text="{Binding StatusMessage, Mode=OneWay}"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     MinHeight="40"
+                     MaxHeight="120"
+                     VerticalScrollBarVisibility="Auto"
+                     Margin="0,0,0,4" />
+            <TextBox Text="{Binding FollowUpText, Mode=OneWay}"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     MaxHeight="80"
+                     VerticalScrollBarVisibility="Auto"
+                     Foreground="#555"
+                     Margin="0,0,0,8" />
         </StackPanel>
 
         <Grid>
@@ -37,24 +55,27 @@
                 <RowDefinition Height="*" />
                 <RowDefinition Height="8" />
                 <RowDefinition Height="*" />
+                <RowDefinition Height="8" />
+                <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
             <DockPanel Grid.Row="0">
-                <TextBlock DockPanel.Dock="Top" Text="Базы ConfigAdmin" FontWeight="SemiBold" Margin="0,0,0,4" />
-                <DataGrid ItemsSource="{Binding ConfigAdminBases}"
-                          SelectedItem="{Binding SelectedBase}"
+                <TextBlock DockPanel.Dock="Top" Text="Конфигурации (база / расширения)" FontWeight="SemiBold" Margin="0,0,0,4" />
+                <DataGrid ItemsSource="{Binding ConfigInstances}"
+                          SelectedItem="{Binding SelectedInstance}"
                           AutoGenerateColumns="False"
                           IsReadOnly="True"
                           CanUserAddRows="False">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Клиент / База" Binding="{Binding DisplayName}" Width="*" />
-                        <DataGridTextColumn Header="Привязка MCP" Binding="{Binding LinkStatus}" Width="200" />
+                        <DataGridTextColumn Header="Клиент / База / Конфигурация" Binding="{Binding DisplayLabel}" Width="*" />
+                        <DataGridTextColumn Header="Тип" Binding="{Binding KindLabel}" Width="90" />
+                        <DataGridTextColumn Header="Привязка MCP" Binding="{Binding LinkStatus}" Width="220" />
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>
 
             <DockPanel Grid.Row="2">
-                <TextBlock DockPanel.Dock="Top" Text="Проекты config-mcp (выберите для привязки)" FontWeight="SemiBold" Margin="0,0,0,4" />
+                <TextBlock DockPanel.Dock="Top" Text="Проекты config-mcp" FontWeight="SemiBold" Margin="0,0,0,4" />
                 <DataGrid ItemsSource="{Binding McpProjects}"
                           SelectedItem="{Binding SelectedMcpProject}"
                           AutoGenerateColumns="False"
@@ -64,6 +85,21 @@
                         <DataGridTextColumn Header="Проект" Binding="{Binding Name}" Width="*" />
                         <DataGridTextColumn Header="Баз" Binding="{Binding DatabaseCount}" Width="60" />
                         <DataGridCheckBoxColumn Header="Active" Binding="{Binding Active}" Width="60" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+
+            <DockPanel Grid.Row="4">
+                <TextBlock DockPanel.Dock="Top" Text="Databases config-mcp" FontWeight="SemiBold" Margin="0,0,0,4" />
+                <DataGrid ItemsSource="{Binding McpDatabases}"
+                          SelectedItem="{Binding SelectedMcpDatabase}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          CanUserAddRows="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Проект / Имя" Binding="{Binding DisplayLabel}" Width="*" />
+                        <DataGridTextColumn Header="Тип" Binding="{Binding Type}" Width="80" />
+                        <DataGridTextColumn Header="Статус" Binding="{Binding StatusLabel}" Width="220" />
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>
