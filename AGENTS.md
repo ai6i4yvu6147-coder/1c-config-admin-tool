@@ -12,7 +12,7 @@
 - целевая модель данных: [`docs/domain-model.md`](docs/domain-model.md)
 - протокол экосистемы: `docs/group/shared/protocol-v1.md` + addendum v1.0.1 + v1.0.2 (канон группы; указатели в `docs/admin-hub/`)
 
-При изменениях схемы SQLite — **NO_DB_MIGRATIONS**: не писать миграции существующих `configadmin.db`. См. [`docs/database.md`](docs/database.md) и [`.cursor/rules/no-db-migrations.md`](.cursor/rules/no-db-migrations.md).
+При изменениях схемы SQLite — **NO_DB_MIGRATIONS**: не писать миграции существующих `configadmin.db`. См. [`docs/database.md`](docs/database.md).
 
 При доработках под Admin Hub — следовать `docs/admin-hub/integration.md` и addendum; WPF не использовать как integration API для внешних MCP.
 
