@@ -1,7 +1,8 @@
 # Модель данных и рабочая область (целевое)
 
 **Статус:** design note; **ConfigurationTemplate / Instance / Export** — в реализации (2026-06).  
-**Интеграция с config-mcp:** согласованный mapping — [`admin-hub/registry-mapping.md`](admin-hub/registry-mapping.md) (agreed 2026-06-28).
+**Интеграция с config-mcp:** согласованный mapping — [`admin-hub/registry-mapping.md`](admin-hub/registry-mapping.md) (agreed 2026-06-28).  
+**Интеграция с data-mcp:** согласованный mapping — [`admin-hub/registry-mapping-data-mcp.md`](admin-hub/registry-mapping-data-mcp.md) (agreed + ack 2026-07-01).
 
 ---
 
@@ -104,7 +105,7 @@
 |----------|------------|
 | `list_clients` / `list_infobases` / `list_configuration_templates` | Где можно работать |
 | `get_infobase_state` / `get_tool_readiness` | Свежий export, индекс, help, data-connection |
-| `resolve_task_context` | Полный контекст задачи для агента |
+| `resolve_infobase_context` | Полный контекст задачи для агента (refs: C-MCP + D-MCP `database_id`; **без S3 credentials**) — см. [`admin-hub/registry-mapping-data-mcp.md`](admin-hub/registry-mapping-data-mcp.md) |
 | `suggest_next_steps` | «Обнови export», «rebuild index», и т.д. |
 | `search_knowledge_by_context` | Похожие кейсы по фильтрам |
 

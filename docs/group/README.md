@@ -1,38 +1,46 @@
-# Группа: 1c-cursor
+# Group: 1c-cursor
 
-Карта подчинённых проектов экосистемы 1С + Cursor. Общий протокол — в `shared/`.
+Map of subordinate projects in the 1C + Cursor ecosystem. Shared protocol — in `shared/`.
 
-## Протокол группы
+## Group protocol
 
-| Поле | Значение |
-|------|----------|
+| Field | Value |
+|-------|-------|
 | protocol_epoch | 0 |
 | group_protocol_state | stable |
 
-## Подчинённые
+## Subordinates
 
-| id | epoch | state | last_ack | Путь |
+| id | epoch | state | last_ack | Path |
 |----|-------|-------|----------|------|
 | `1c-config-mcp` | 0 | stable | 2026-06-30T06:30:05Z | `C:/projects/1c-config-mcp` |
-| `1c-data-mcp` | 0 | stable | 2026-06-30T06:46:43Z | `C:/projects/1c-data-mcp` |
+| `1c-data-mcp` | 0 | stable | 2026-07-01T172000Z | `C:/projects/1c-data-mcp` |
 | `1c-help-mcp` | 0 | stable | 2026-06-30T06:49:49Z | `C:/projects/1c-help-mcp` |
 
 `state`: `negotiating` | `stable` | `stale` | `defer_manual`
 
-## Общая документация
+## Shared documentation
 
-`shared/` — **канон** общих спек группы (протокол, registry mapping).
+`shared/` — **canon** of group-wide specs (protocol, registry mapping).
 
-- Baseline: skill `export-group-protocol` → snapshot + `protocol_offer`
-- Дельты после stable: `emit-group-sync-packet` (`kind: sync_delta`)
-- Доставка: `python scripts/sync-relay.py --deliver --repo .`
+- Baseline / ripple: skill **`sync-base`** → `protocol_offer` + snapshot in outbox
+- Deltas after stable: skill **`sync`** (`kind: sync_delta`)
+- Delivery: operator (see [`OPERATOR-HANDOFF.md`](OPERATOR-HANDOFF.md))
 
-Hub-специфика реализации Admin Hub — в [`../admin-hub/`](../admin-hub/).
+Hub-specific Admin Hub implementation — in [`../admin-hub/`](../admin-hub/).
 
-## Inbox от Sub
+## Ripple (epoch bump)
 
-`inbox/<sub-id>/` — пакеты от подчинённых; обработать через `process-group-inbox` → `doc-librarian` (+ `group-sync-arbitrator` для `protocol_dispute`). Удалить файл после обработки.
+When `protocol_epoch` in `shared/` changes for all Subs — `protocol_ripple` + snapshot (`sync-base`) to each lagging Sub. See [`../canons/group-sync.md`](../canons/group-sync.md).
 
-## Outbox к Sub
+## Inbox from Sub
 
-`outbox/<sub-id>/` — исходящие пакеты и snapshot-каталоги. Не коммитить.
+`inbox/<sub-id>/` — packets from subordinates; process with skill **`sync`**. Delete the file after processing.
+
+## Outbox to Sub
+
+`outbox/<sub-id>/` — outgoing packets and snapshot directories. Do not commit.
+
+## Operator
+
+[`OPERATOR-HANDOFF.md`](OPERATOR-HANDOFF.md) — outbox ↔ inbox copy paths.

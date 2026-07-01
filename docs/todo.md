@@ -1,236 +1,245 @@
 # Backlog — ConfigAdmin
 
-Живой список задач. Текущее состояние продукта — [README.md](../README.md), архитектура — [architecture.md](architecture.md).
+Living task list. Current product state — [README.md](../README.md), architecture — [architecture.md](architecture.md).
 
 ---
 
 ## Admin Hub protocol (config-admin + host shell)
 
-Протокол: [admin-hub/integration.md](admin-hub/integration.md). Реализация — по фазам, без big bang.
+Protocol: [admin-hub/integration.md](admin-hub/integration.md). Implementation — phased, no big bang.
 
-| Фаза | Задачи | Статус |
-|------|--------|--------|
-| **Phase 1 (config-mcp)** | Hub tables в SQLite, MCP screen, `apply-registry` sync, post-export sync | **готово** |
-| **Phase 1 (config-admin CLI)** | `module.manifest.json`, `inventory --json`, `status --json`, JSON для `list-bases`/`list-runs` | не начато |
-| **Phase 2** | ConfigAdmin `export-registry`/`apply-registry`, export locks, JSON export/test-connection | не начато |
-| **Phase 3 (config-mcp CLI)** | `rebuild-index`, `rebuild-all`, `reconcile-markers`, `apply-registry --trigger-rebuild`, `indexReadiness` в status | **готово** (2026-06-29) |
-| **Phase 3 (Hub H6)** | orchestration **`rebuild-index` после export / Remote Sync** | **готово** (2026-06-30, E2E ✅) |
+| Phase | Tasks | Status |
+|-------|-------|--------|
+| **Phase 1 (config-mcp)** | Hub tables in SQLite, MCP screen, `apply-registry` sync, post-export sync | **done** |
+| **Phase 1 (config-admin CLI)** | `module.manifest.json`, `inventory --json`, `status --json`, JSON for `list-bases`/`list-runs` | not started |
+| **Phase 2** | ConfigAdmin `export-registry`/`apply-registry`, export locks, JSON export/test-connection | not started |
+| **Phase 3 (config-mcp CLI)** | `rebuild-index`, `rebuild-all`, `reconcile-markers`, `apply-registry --trigger-rebuild`, `indexReadiness` in status | **done** (2026-06-29) |
+| **Phase 3 (Hub H6)** | orchestration **`rebuild-index` after export / Remote Sync** | **done** (2026-06-30, E2E ✅) |
 
-### Instance-level MCP — проверено E2E (2026-06-30)
+### Instance-level MCP — E2E verified (2026-06-30)
 
-**Сценарий (ручная проверка):** настройка базы и расширений в Hub → экран MCP: привязка к существующему проекту + «Создать новую database» (до первой выгрузки, planned `sourcePath`) → локальная выгрузка расширения → post-export sync → `apply-registry` + автоматический `rebuild-index` → расширение видно в MCP.
+**Scenario (manual check):** configure infobase and extensions in Hub → MCP screen: link to existing project + "Create new database" (before first export, planned `sourcePath`) → local extension export → post-export sync → `apply-registry` + automatic `rebuild-index` → extension visible in MCP.
 
-| Шаг | Компонент | Статус |
-|-----|-----------|--------|
-| Привязка до выгрузки | `ConfigMcpProjectsJsonMerger` (planned path в `projects.json`) | ✅ |
-| Синхронизация после выгрузки | `ConfigMcpSyncService.ApplyFragmentAsync` → `apply-registry` | ✅ |
-| Индекс `.db` | H6: `rebuild-index` по `followUpOperations` / fallback по `sourcePath` на диске | ✅ |
-| Кодировка `projects.json` | `UnsafeRelaxedJsonEscaping` + UTF-8 без BOM в merger | ✅ |
+| Step | Component | Status |
+|------|-----------|--------|
+| Link before export | `ConfigMcpProjectsJsonMerger` (planned path in `projects.json`) | ✅ |
+| Post-export sync | `ConfigMcpSyncService.ApplyFragmentAsync` → `apply-registry` | ✅ |
+| Index `.db` | H6: `rebuild-index` via `followUpOperations` / fallback by on-disk `sourcePath` | ✅ |
+| `projects.json` encoding | `UnsafeRelaxedJsonEscaping` + UTF-8 without BOM in merger | ✅ |
 
-Код: `ConfigMcpSyncService`, `ConfigMcpProjectsJsonMerger`, `ConfigMcpFragmentBuilder`, `ConfigMcpViewModel`, `ExportViewModel.TrySyncToMcpAsync`.
+Code: `ConfigMcpSyncService`, `ConfigMcpProjectsJsonMerger`, `ConfigMcpFragmentBuilder`, `ConfigMcpViewModel`, `ExportViewModel.TrySyncToMcpAsync`.
 
-Чеклист для регрессии: [`admin-hub/integration.md`](admin-hub/integration.md) § Reference workflow.
+Regression checklist: [`admin-hub/integration.md`](admin-hub/integration.md) § Reference workflow.
 
 ### Registry mapping (config-mcp) — agreed 2026-06-28
 
-Канон: [`admin-hub/registry-mapping.md`](admin-hub/registry-mapping.md). Реализация — **registry R2** (код пока R1).
+Canon: [`admin-hub/registry-mapping.md`](admin-hub/registry-mapping.md). Implementation — **registry R2** (code still R1).
 
-| ID | Задача | Статус |
-|----|--------|--------|
-| H1 | `config_mcp_project_id` на Client, auto-assign | не начато |
-| H2 | Fragment: Client + N databases | не начато |
-| H3 | Export: id и path на base + extensions | не начато |
-| H4 | Deprecate ручной линк infobase→project | не начато |
-| H5 | Документация `registry-mapping.md` | **готово** |
-| H6 | Orchestration `rebuild-index` (apply → followUpOperations → subprocess) | **готово** (2026-06-30, E2E ✅) |
-| H7 | UI: «MCP-контейнер» вместо «MCP Project» | не начато |
+| ID | Task | Status |
+|----|------|--------|
+| H1 | `config_mcp_project_id` on Client, auto-assign | not started |
+| H2 | Fragment: Client + N databases | not started |
+| H3 | Export: id and path on base + extensions | not started |
+| H4 | Deprecate manual infobase→project link | not started |
+| H5 | Documentation `registry-mapping.md` | **done** |
+| H6 | Orchestration `rebuild-index` (apply → followUpOperations → subprocess) | **done** (2026-06-30, E2E ✅) |
+| H7 | UI: "MCP container" instead of "MCP Project" | not started |
 
----
+### Registry mapping (data-mcp) — agreed + ack 2026-07-01
 
-## Remote Sync (доставка XML с RDP)
+Canon: [`admin-hub/registry-mapping-data-mcp.md`](admin-hub/registry-mapping-data-mcp.md), protocol [`group/shared/protocol-v1.0.4-addendum.md`](group/shared/protocol-v1.0.4-addendum.md). Hub Phase 1 tasks **ready** (code not started).
 
-Спецификация: [`remote-sync/README.md`](remote-sync/README.md). **Phase R-Ping — готово** (2026-06-28).
-
-| Фаза | Задачи | Статус |
-|------|--------|--------|
-| **R-Ping** | Schema узлов, receiver, agent UI, Tailscale Funnel, E2E register/heartbeat | **готово** |
-| **R1 MVP** | Chunk upload, zip/resume, sync UI, E2E выгрузка | **готово** (manual E2E ✅ 2026-06-28) |
-| **R1.x** | Live-прогресс export 1С (file count/size в work dir) | **готово** |
-| **R2** | Headless agent, **скорость upload**, cleanup-настройка, **упрощение GUI**, multi-PC Hub | не начато |
-| **R3** | Relay VPS, S3, расписание | не начато |
-
-Статус и инструкция по сети: [`remote-sync/status.md`](remote-sync/status.md), [`remote-sync/network-setup.md`](remote-sync/network-setup.md).
+| ID | Task | Status |
+|----|------|--------|
+| D-H6 | Mapping doc + merge + Sub ack | **done** (2026-07-01) |
+| D-H1 | SQLite schema | **ready** |
+| D-H2 | WPF D-MCP settings | **ready** |
+| D-H3 | Sealed file R/W + test vector | **ready** |
+| D-H4 | DataMcpSyncService | **ready** |
+| D-H5 | `resolve_infobase_context` | **ready** |
 
 ---
 
-## Продуктовый backlog
+## Remote Sync (XML delivery from RDP)
 
-### 0. Remote Sync — UX и скорость (после R1 E2E)
+Specification: [`remote-sync/README.md`](remote-sync/README.md). **Phase R-Ping — done** (2026-06-28).
 
-**Сейчас:** E2E работает, но GUI перегружен и неочевиден; upload ~800 MB занимает 30+ мин через Funnel.
+| Phase | Tasks | Status |
+|-------|-------|--------|
+| **R-Ping** | Node schema, receiver, agent UI, Tailscale Funnel, E2E register/heartbeat | **done** |
+| **R1 MVP** | Chunk upload, zip/resume, sync UI, E2E export | **done** (manual E2E ✅ 2026-06-28) |
+| **R1.x** | Live 1C export progress (file count/size in work dir) | **done** |
+| **R2** | Headless agent, **upload speed**, cleanup settings, **GUI simplification**, multi-PC Hub | not started |
+| **R3** | Relay VPS, S3, scheduling | not started |
 
-- Упростить экраны Hub (Remote-база, tunnel, статус job) и Передатчик (pairing + прогресс на одном экране).
-  - **частично (2026-07-01):** `HubSettingsView` (listen URL отдельно от Tailscale URL для RDP); shell «← Назад (Esc)» вместо дублирующих кнопок на дочерних экранах; общие стили; batch refresh списка баз.
-- R2.6: оптимизация скорости — chunk size, direct Tailscale, параллельные chunks.
-- R2.10: **расчёт и отображение примерной скорости загрузки на Hub** — MB/s (скользящее среднее по отправленным chunks), ETA по `uploaded/total`; UI Передатчика и карточка job на Hub.
-- R2.7: cleanup на RDP — **две кнопки** на Передатчике (B4) — **готово** (2026-06-30): `AgentDataCleanupService`, `SyncAgentView`.
-- **Полный MCP-цикл (H6 / R2.9):** **готово** (2026-06-30) — Hub orchestration `rebuild-index` после export / sync. См. [`admin-hub/integration.md`](admin-hub/integration.md) § Reference workflow.
+Status and network setup: [`remote-sync/status.md`](remote-sync/status.md), [`remote-sync/network-setup.md`](remote-sync/network-setup.md).
 
-Детали: [`remote-sync/implementation-plan.md`](remote-sync/implementation-plan.md) R2.6–R2.10, [`remote-sync/status.md`](remote-sync/status.md).
+---
 
-### 1. Выгрузка всех баз
+## Product backlog
 
-**Сейчас:** `export-all` только в консоли.
+### 0. Remote Sync — UX and speed (after R1 E2E)
 
-- Кнопка «Выгрузить все базы» в WPF.
-- Прогресс по базе, итоговый отчёт.
+**Now:** E2E works, but GUI is overloaded and unclear; upload ~800 MB takes 30+ min via Funnel.
 
-### 2. Удаление и сброс данных
+- Simplify Hub screens (Remote infobase, tunnel, job status) and Relay (pairing + progress on one screen).
+  - **partial (2026-07-01):** `HubSettingsView` (listen URL separate from Tailscale URL for RDP); shell "← Back (Esc)" instead of duplicate buttons on child screens; shared styles; batch refresh of infobase list.
+- R2.6: speed optimization — chunk size, direct Tailscale, parallel chunks.
+- R2.10: **estimate and display upload speed on Hub** — MB/s (rolling average over sent chunks), ETA by `uploaded/total`; Relay UI and Hub job card.
+- R2.7: cleanup on RDP — **two buttons** on Relay (B4) — **done** (2026-06-30): `AgentDataCleanupService`, `SyncAgentView`.
+- **Full MCP cycle (H6 / R2.9):** **done** (2026-06-30) — Hub orchestration `rebuild-index` after export / sync. See [`admin-hub/integration.md`](admin-hub/integration.md) § Reference workflow.
 
-**Сейчас:** delete в `ProfileService`, в GUI недоступно.
+Details: [`remote-sync/implementation-plan.md`](remote-sync/implementation-plan.md) R2.6–R2.10, [`remote-sync/status.md`](remote-sync/status.md).
 
-- Удаление базы/клиента из GUI.
-- Сброс профиля (очистка `%AppData%\ConfigAdmin\`).
-- Предупреждение: XML на диске не удаляются.
+### 1. Export all infobases
 
-### 3. План выгрузки на экране «Выгрузка» (B3) — **выполнено (2026-06-30)**
+**Now:** `export-all` only in console.
 
-**Было:** план read-only; `ExportEnabled` только в карточке базы.
+- "Export all infobases" button in WPF.
+- Per-infobase progress, summary report.
 
-**Сделано:** чекбоксы «Выгрузить» в гриде `ExportView` — **только на один запуск**; `configuration_instances.export_enabled` в SQLite **не меняется**. Session override в `ExportViewModel` → `ExportOrchestrator` и `RemoteSyncOrchestrator.RequestSyncAsync(planOverride)`.
+### 2. Data deletion and reset
 
-- [x] Чекбоксы в гриде плана на экране Выгрузка
-- [x] Фильтрация export plan / remote jobs по session-override
-- [x] Подсказка в UI: изменения не сохраняются в настройках базы
+**Now:** delete in `ProfileService`, not available in GUI.
 
-### 4. Дерево клиентов/баз
+- Delete infobase/client from GUI.
+- Profile reset (clear `%AppData%\ConfigAdmin\`).
+- Warning: on-disk XML is not deleted.
 
-**Сейчас:** плоский список `Клиент / База`.
+### 3. Export plan on Export screen (B3) — **done (2026-06-30)**
 
-- Редактирование клиента.
-- UI-дерево: клиент → базы.
-- Export root на уровне клиента.
+**Was:** plan read-only; `ExportEnabled` only on infobase card.
 
-### 5. Журнал выгрузок — **выполнено**
+**Done:** "Export" checkboxes in `ExportView` grid — **single run only**; `configuration_instances.export_enabled` in SQLite **not changed**. Session override in `ExportViewModel` → `ExportOrchestrator` and `RemoteSyncOrchestrator.RequestSyncAsync(planOverride)`.
 
-Serilog, `runs/`, meta JSON, экран логов в WPF, `/Out` и `/DumpResult`.
+- [x] Checkboxes in plan grid on Export screen
+- [x] Filter export plan / remote jobs by session override
+- [x] UI hint: changes are not saved to infobase settings
 
-### 6. Формат выгрузки: XML или архив
+### 4. Client/infobase tree
 
-- Настройка на уровне базы: каталог vs архив.
-- Spike CLI 1С для `/DumpCfg` и расширений.
+**Now:** flat list `Client / Infobase`.
 
-### 7. Единый журнал UI-событий — **частично (2026-06-29)**
+- Edit client.
+- UI tree: client → infobases.
+- Export root at client level.
 
-**Сейчас:** вкладка «События» в журнале (`UiActivityLog`), ошибки MCP пишутся в память + `%AppData%\ConfigAdmin\logs\`; копируемый текст на экране MCP.
+### 5. Export journal — **done**
 
-**Целевое:** единый `IUiNotificationService` для всех экранов, автопереход в журнал при ERROR, дублирование в Serilog, опционально toast; удаление «битых» проектов MCP из UI (`apply-registry` remove / Admin GUI config-mcp).
+Serilog, `runs/`, meta JSON, log screen in WPF, `/Out` and `/DumpResult`.
 
-- [x] `UiActivityLog` + вкладка «События»
-- [x] MCP → журнал + копируемый статус
-- [ ] Подключить Export, Remote Sync, BaseEdit и остальные экраны
-- [ ] UI удаления project/database в portable (см. B1)
+### 6. Export format: XML or archive
 
-### 8. ConfigurationTemplate / Instance — **в работе**
+- Per-infobase setting: directory vs archive.
+- Spike 1C CLI for `/DumpCfg` and extensions.
 
-Канон: [`domain-model.md`](domain-model.md). Глобальные шаблоны + instances на инфobазе (шаблонные и локальные расширения); единый export plan; Remote 1 job = 1 instance.
+### 7. Unified UI event journal — **partial (2026-06-29)**
 
-- [x] Design note и схема SQLite
+**Now:** "Events" tab in journal (`UiActivityLog`), MCP errors written to memory + `%AppData%\ConfigAdmin\logs\`; copyable text on MCP screen.
+
+**Target:** unified `IUiNotificationService` for all screens, auto-navigate to journal on ERROR, duplicate to Serilog, optional toast; remove "broken" MCP projects from UI (`apply-registry` remove / Admin GUI config-mcp).
+
+- [x] `UiActivityLog` + "Events" tab
+- [x] MCP → journal + copyable status
+- [ ] Wire Export, Remote Sync, BaseEdit and other screens
+- [ ] UI to remove project/database in portable (see B1)
+
+### 8. ConfigurationTemplate / Instance — **in progress**
+
+Canon: [`domain-model.md`](domain-model.md). Global templates + instances on infobase (template and local extensions); unified export plan; Remote 1 job = 1 instance.
+
+- [x] Design note and SQLite schema
 - [x] Instance-level MCP link + post-export sync (E2E 2026-06-30)
-- [ ] WPF: каталог шаблонов, редактор instances на базе
+- [ ] WPF: template catalog, instance editor on infobase
 - [ ] Export / Remote Sync / MCP fragment (H3 partial)
 
-**Follow-up:** автообнаружение расширений из 1С → предложение instance.
+**Follow-up:** auto-discover extensions from 1C → suggest instance.
 
 ---
 
-## Известные баги и UX-дыры
+## Known bugs and UX gaps
 
-*Обновлено: 2026-07-01 (B2, B3, B4 закрыты; B1 — частичная защита; WPF UI review — 2026-07-01).*
+*Updated: 2026-07-01 (B2, B3, B4 closed; B1 — partial protection; WPF UI review — 2026-07-01).*
 
-### Закрыто (2026-06-30)
+### Closed (2026-06-30)
 
-| ID | Симптом | Решение |
-|----|---------|---------|
-| **B2** | Hub **вылетает** при повторном открытии карточки базы | **исправлено:** singleton `BaseEditViewModel` + detached WPF-привязки при `Clients.Clear()`. `PrepareEditAsync`/`PrepareCreateAsync` до навигации; `_suppressClientChange` на время prepare; переиспользование `BaseEditView` + `DataContext = null` при уходе (`NavigationService`); `DispatcherUnhandledException` в `App.xaml.cs`. |
-| **B3** | План выгрузки read-only на экране «Выгрузка» | **исправлено:** см. §3 выше. |
-| **B4** | Артефакты sync на RDP после job | **исправлено:** две кнопки на Передатчике; `AgentDataCleanupService`; подтверждение; активный job не трогается. |
+| ID | Symptom | Fix |
+|----|---------|-----|
+| **B2** | Hub **crashes** on reopening infobase card | **fixed:** singleton `BaseEditViewModel` + detached WPF bindings on `Clients.Clear()`. `PrepareEditAsync`/`PrepareCreateAsync` before navigation; `_suppressClientChange` during prepare; reuse `BaseEditView` + `DataContext = null` on leave (`NavigationService`); `DispatcherUnhandledException` in `App.xaml.cs`. |
+| **B3** | Export plan read-only on Export screen | **fixed:** see §3 above. |
+| **B4** | Sync artifacts on RDP after job | **fixed:** two buttons on Relay; `AgentDataCleanupService`; confirmation; active job untouched. |
 
-### WPF UI review — закрыто (2026-07-01)
+### WPF UI review — closed (2026-07-01)
 
-| Тема | Решение |
-|------|---------|
-| Vault lock — stale master password | `VaultViewModel.ResetForLock()` перед `SetRoot<VaultViewModel>` |
-| Переименование клиента → дубликат | `ProfileService.AddOrUpdateClientAsync(..., clientId)` |
-| Test connection сбрасывает export-настройки | `ConnectionTestService.TestDraftAsync` — без persist до Save |
-| `ExportViewModel.Begin` async void | `BeginAsync` + await в `MainViewModel` |
-| ConfigMcp двойной refresh | `_initialized` в `RefreshOnNavigateAsync`; убран `OnLoaded` |
-| Zombie ConfigAdmin.exe после закрытия | graceful shutdown + `Environment.Exit` только по timeout |
-| N+1 при refresh списка баз | `GetExportSummariesForAllBasesAsync()` |
+| Topic | Fix |
+|-------|-----|
+| Vault lock — stale master password | `VaultViewModel.ResetForLock()` before `SetRoot<VaultViewModel>` |
+| Client rename → duplicate | `ProfileService.AddOrUpdateClientAsync(..., clientId)` |
+| Test connection resets export settings | `ConnectionTestService.TestDraftAsync` — no persist until Save |
+| `ExportViewModel.Begin` async void | `BeginAsync` + await in `MainViewModel` |
+| ConfigMcp double refresh | `_initialized` in `RefreshOnNavigateAsync`; removed `OnLoaded` |
+| Zombie ConfigAdmin.exe after close | graceful shutdown + `Environment.Exit` only on timeout |
+| N+1 on infobase list refresh | `GetExportSummariesForAllBasesAsync()` |
 
-Код: `NavigationService`, `PasswordBoxBindingBehavior`, `BusyViewModelBase`, `HubSettingsView`, `App.xaml.cs`.
+Code: `NavigationService`, `PasswordBoxBindingBehavior`, `BusyViewModelBase`, `HubSettingsView`, `App.xaml.cs`.
 
-### Открыто
+### Open
 
-| ID | Симптом | Контекст | Приоритет |
-|----|---------|----------|-----------|
-| **B1** | Мусорные проекты «Р» / «P» в `projects.json` | Частичная защита 2026-06-30 (лог, дубликат, default UI). UI удаления — открыто (§7) | P1 |
+| ID | Symptom | Context | Priority |
+|----|---------|---------|----------|
+| **B1** | Junk projects "Р" / "P" in `projects.json` | Partial protection 2026-06-30 (log, duplicate, default UI). Delete UI — open (§7) | P1 |
 
-### B2 — crash карточки базы (архив)
+### B4 — Relay cleanup (R2.7, closed)
 
-**Root cause:** отсоединённый `BaseEditView` сохранял привязки к singleton VM; `Clients.Clear()` в `PrepareEdit` сбрасывал `SelectedClient` через ComboBox → гонка `LoadRemoteNodesForClientAsync`.
+**Two buttons** (confirmation + result in Relay log):
 
-### B4 — очистка на Передатчике (R2.7, закрыто)
+| Button | Scope | Do not touch |
+|--------|-------|--------------|
+| **Clear job directories** | `%AppData%\ConfigAdmin\agent\work\` (all `{jobId}\`), optionally `agent\resume\` | active job (export/upload in progress) |
+| **Full software trace cleanup** | entire `%AppData%\ConfigAdmin\` on this machine: `agent\` (work, resume, `settings.json`), `logs\`, local `configadmin.db` if present | Hub `ExportRoot` on Hub PC; RDP usually has no Hub exports |
 
-**Две кнопки** (подтверждение + итог в лог Передатчика):
+Code: `AgentDataCleanupService`, `SyncAgentViewModel`, `AgentSettingsStore`; per-job — `SyncAgentJobProcessor.TryCleanupWorkDir`.
 
-| Кнопка | Scope | Не трогать |
-|--------|-------|------------|
-| **Очистить job-каталоги** | `%AppData%\ConfigAdmin\agent\work\` (все `{jobId}\`), опционально `agent\resume\` | активный job (export/upload в процессе) |
-| **Полная очистка следов ПО** | весь `%AppData%\ConfigAdmin\` на этой машине: `agent\` (work, resume, `settings.json`), `logs\`, локальный `configadmin.db` если есть | Hub `ExportRoot` на ПК Hub; на RDP обычно нет выгрузок Hub |
+Optional later: automatic cleanup after success (R2.7 setting).
 
-Код: `AgentDataCleanupService`, `SyncAgentViewModel`, `AgentSettingsStore`; per-job — `SyncAgentJobProcessor.TryCleanupWorkDir`.
+### B1 — junk MCP projects (in addition to §7)
 
-Опционально позже: автоматический cleanup после успеха (настройка R2.7).
-
-### B1 — мусорные MCP-проекты (дополнительно к §7)
-
-- [x] Лог привязки: `ConfigMcpSyncService.LinkAndSyncInstanceAsync`, журнал UI в `ConfigMcpViewModel` (2026-06-30)
-- [x] Запрет дубликата проекта по имени клиента в `projects.json` (2026-06-30)
-- [x] Default: не «Создать проект», если в MCP уже есть проект с именем клиента (2026-06-30)
-- [x] Подсказка в UI: ручная очистка / reconcile CLI (2026-06-30)
-- [ ] UI удаления project/database в portable или reconcile через CLI
-- [ ] Ручная очистка существующих «Р» / «P» в `projects.json` или Admin GUI config-mcp
+- [x] Link log: `ConfigMcpSyncService.LinkAndSyncInstanceAsync`, UI journal in `ConfigMcpViewModel` (2026-06-30)
+- [x] Block duplicate project by client name in `projects.json` (2026-06-30)
+- [x] Default: not "Create project" if MCP already has project with client name (2026-06-30)
+- [x] UI hint: manual cleanup / reconcile CLI (2026-06-30)
+- [ ] UI to remove project/database in portable or reconcile via CLI
+- [ ] Manual cleanup of existing "Р" / "P" in `projects.json` or Admin GUI config-mcp
 
 ---
 
-## Вне scope (пока)
+## Out of scope (for now)
 
-- Расписание выгрузок, checksum снимков.
-- CI с установленной 1С.
-- Миграции существующих `configadmin.db` (политика NO_DB_MIGRATIONS).
+- Scheduled exports, snapshot checksums.
+- CI with installed 1C.
+- Migrations of existing `configadmin.db` (NO_DB_MIGRATIONS policy).
 
 ---
 
-## Приоритеты
+## Priorities
 
-| P | Задача |
-|---|--------|
-| P0 | **B2:** crash при повторном открытии карточки базы — **done** (2026-06-30) |
+| P | Task |
+|---|------|
+| P0 | **B2:** crash on reopening infobase card — **done** (2026-06-30) |
 | P0 | ConfigAdmin protocol CLI (Phase 1) |
 | P0 | config-mcp integration (Phase 1) — **done** |
-| P1 | **B1** мусорные MCP-проекты «Р» — **частично** (2026-06-30) |
-| P1 | **B3** план на экране Выгрузка — **done** (2026-06-30) |
-| P1 | **B4** очистка work dirs на Передатчике — **done** (2026-06-30) |
+| P1 | **B1** junk MCP projects "Р" — **partial** (2026-06-30) |
+| P1 | **B3** plan on Export screen — **done** (2026-06-30) |
+| P1 | **B4** cleanup work dirs on Relay — **done** (2026-06-30) |
 | P1 | **ConfigurationTemplate / Instance** (export plan, Remote extensions) |
 | P1 | **H6** — **done** (2026-06-30) |
-| P1 | Remote Sync R2: UX/GUI + скорость upload — **частично** (Hub settings, shell nav, 2026-07-01) |
-| P1 | Дерево клиентов/баз + редактирование клиента |
-| P1 | Удаление и сброс |
-| P2 | Выгрузить все базы (GUI) |
+| P1 | Remote Sync R2: UX/GUI + upload speed — **partial** (Hub settings, shell nav, 2026-07-01) |
+| P1 | Client/infobase tree + client editing |
+| P1 | Deletion and reset |
+| P2 | Export all infobases (GUI) |
 | P2 | ConfigAdmin registry sync (Phase 2) |
-| P3 | XML vs архив, автообнаружение расширений |
-| P3 | help/data MCP links (Phase 3) |
+| P3 | XML vs archive, auto-discover extensions |
+| P3 | help-mcp links (Phase 3) |
+| P3 | **data-mcp integration** — mapping **agreed + ack** (2026-07-01); Hub Phase 1 (D-H1…D-H5) **ready** — [`registry-mapping-data-mcp.md`](admin-hub/registry-mapping-data-mcp.md) |
 
-*Обновлено: 2026-07-01*
-
+*Updated: 2026-07-02*

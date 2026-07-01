@@ -3,7 +3,7 @@ using ConfigAdmin.Infrastructure.Hub;
 
 namespace ConfigAdmin.Application.Hub;
 
-public sealed class ConfigMcpToolClient
+public sealed class ConfigMcpToolClient : IConfigMcpToolClient
 {
     private readonly JsonCliRunner _cliRunner;
     private readonly ManagedToolRegistryService _registryService;

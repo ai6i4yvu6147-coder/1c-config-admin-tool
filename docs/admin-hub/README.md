@@ -1,6 +1,6 @@
 ## Admin Hub — документация интеграции
 
-Материалы о роли **ConfigAdmin** в экосистеме 1С AI tooling: managed tool `config-admin` и **реализация Admin Hub** (protocol v1.0.2).
+Материалы о роли **ConfigAdmin** в экосистеме 1С AI tooling: managed tool `config-admin` и **реализация Admin Hub** (protocol v1 + addenda; канон — `group/shared/`).
 
 ### Канон протокола группы
 
@@ -12,7 +12,8 @@
 | Addendum v1.0.1 | [`../group/shared/protocol-v1.0.1-addendum.md`](../group/shared/protocol-v1.0.1-addendum.md) |
 | Addendum v1.0.2 | [`../group/shared/protocol-v1.0.2-addendum.md`](../group/shared/protocol-v1.0.2-addendum.md) |
 | Addendum v1.0.3 | [`../group/shared/protocol-v1.0.3-addendum.md`](../group/shared/protocol-v1.0.3-addendum.md) |
-| Registry mapping | [`../group/shared/registry-mapping.md`](../group/shared/registry-mapping.md) |
+| Addendum v1.0.4 | [`../group/shared/protocol-v1.0.4-addendum.md`](../group/shared/protocol-v1.0.4-addendum.md) |
+| Registry mapping (config-mcp) | [`../group/shared/registry-mapping.md`](../group/shared/registry-mapping.md) |
 
 Локальные файлы `protocol-v1*.md` и `registry-mapping.md` в этой папке — **указатели** на `shared/` (совместимость ссылок).
 
@@ -21,6 +22,7 @@
 | Документ | Содержание |
 |----------|------------|
 | [`integration.md`](integration.md) | принципы, статус, roadmap, ownership |
+| [`registry-mapping-data-mcp.md`](registry-mapping-data-mcp.md) | согласованный mapping Hub ↔ data-mcp (ack 2026-07-01) |
 | [`registry-mapping-config-mcp-response-2026-06-28.md`](registry-mapping-config-mcp-response-2026-06-28.md) | архив ответа config-mcp |
 | [`registry-mapping-hub-response-2026-06-28.md`](registry-mapping-hub-response-2026-06-28.md) | архив ответа Hub |
 

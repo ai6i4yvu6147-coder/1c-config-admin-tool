@@ -3,7 +3,6 @@ using ConfigAdmin.Application.Hub;
 using ConfigAdmin.Application.Services;
 using ConfigAdmin.Domain;
 using ConfigAdmin.Domain.Enums;
-using ConfigAdmin.Domain.Hub;
 using ConfigAdmin.Domain.Models;
 using ConfigAdmin.Infrastructure.Data;
 using ConfigAdmin.Infrastructure.FileSystem;
@@ -15,6 +14,14 @@ namespace ConfigAdmin.Tests.Hub;
 
 public class ConfigMcpSyncServiceTests
 {
+    [Fact]
+    public void CreateServiceAsync_DoesNotUseDefaultPortableRoot()
+    {
+        Assert.NotEqual(
+            ManagedToolRegistryService.DefaultConfigMcpRootPath,
+            Path.GetFullPath(CreateTempPortableRoot()));
+    }
+
     [Fact]
     public async Task LinkInstanceAsync_NewProject_AssignsProjectIdToInstance()
     {
@@ -89,12 +96,13 @@ public class ConfigMcpSyncServiceTests
     public async Task SyncInstanceAsync_WithoutPriorExport_CreatesExportRecord()
     {
         var (service, instanceId, _, _, exportRepo) = await CreateServiceAsync(withExport: false);
+        var projectId = Guid.NewGuid();
 
         await service.LinkInstanceAsync(instanceId, new ConfigMcpLinkRequest
         {
             Mode = ConfigMcpLinkMode.NewDatabaseInProject,
-            ProjectId = Guid.NewGuid(),
-            ProjectName = "P"
+            ProjectId = projectId,
+            ProjectName = "Client / Base"
         });
 
         _ = await service.SyncInstanceAsync(instanceId);
@@ -168,6 +176,23 @@ public class ConfigMcpSyncServiceTests
     }
 
     [Fact]
+    public void ShouldTryPlannedPathMerge_WhenCliCreatedProjectShell_StillMerges()
+    {
+        var response = new ConfigMcpApplyRegistryResponse
+        {
+            Warnings = ["infobaseId abc: sourcePath directory not found: C:\\missing"]
+        };
+        var result = new ConfigMcpSyncResult
+        {
+            Success = true,
+            ChangesCreated = 1,
+            ChangesSkipped = 1
+        };
+
+        Assert.True(ConfigMcpSyncService.ShouldTryPlannedPathMerge(response, result));
+    }
+
+    [Fact]
     public void CollectRebuildDatabaseIds_UsesFollowUpOperations()
     {
         var databaseId = Guid.NewGuid().ToString();
@@ -237,6 +262,49 @@ public class ConfigMcpSyncServiceTests
         {
             Directory.Delete(tempDir, recursive: true);
         }
+    }
+
+    [Fact]
+    public void ProjectsJsonMerger_TryRemoveProjects_RemovesTrackedIds()
+    {
+        var keepId = Guid.NewGuid().ToString();
+        var removeId = Guid.NewGuid().ToString();
+        var path = Path.Combine(Path.GetTempPath(), $"projects-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path,
+            $$"""
+            {
+              "projects": [
+                { "id": "{{removeId}}", "name": "A", "active": true, "databases": [] },
+                { "id": "{{keepId}}", "name": "B", "active": true, "databases": [] }
+              ]
+            }
+            """);
+
+        try
+        {
+            var merger = new ConfigMcpProjectsJsonMerger();
+            Assert.True(merger.TryRemoveProjects(path, [removeId], out var removed, out var error), error);
+            Assert.Equal(1, removed);
+
+            var remaining = ConfigMcpProjectsJsonMerger.LoadProjectIds(path);
+            Assert.Single(remaining);
+            Assert.Equal(keepId, remaining[0], StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static string CreateTempPortableRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"mcp-portable-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(
+            Path.Combine(root, "projects.json"),
+            """{"projects":[]}""",
+            System.Text.Encoding.UTF8);
+        return root;
     }
 
     private static async Task<(
@@ -313,7 +381,7 @@ public class ConfigMcpSyncServiceTests
 
         var toolRepo = new ToolInstanceRepository(factory);
         var registryService = new ManagedToolRegistryService(toolRepo, new ModuleManifestReader());
-        var toolClient = new ConfigMcpToolClient(new JsonCliRunner(), registryService);
+        await registryService.SaveConfigMcpRootPathAsync(CreateTempPortableRoot());
 
         var service = new ConfigMcpSyncService(
             infobaseRepo,
@@ -321,12 +389,44 @@ public class ConfigMcpSyncServiceTests
             hubProjectRepo,
             instanceRepo,
             fragmentBuilder,
-            toolClient,
+            new FakeConfigMcpToolClient(),
             registryService,
             configService,
             new ConfigMcpProjectsJsonMerger(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ConfigMcpSyncService>.Instance);
 
         return (service, instanceId, instanceRepo, infobaseRepo, exportRepo);
+    }
+
+    private sealed class FakeConfigMcpToolClient : IConfigMcpToolClient
+    {
+        public Task<ConfigMcpInventoryResponse> GetInventoryAsync(CancellationToken ct = default) =>
+            Task.FromResult(new ConfigMcpInventoryResponse());
+
+        public Task<ConfigMcpStatusResponse> GetStatusAsync(CancellationToken ct = default) =>
+            Task.FromResult(new ConfigMcpStatusResponse());
+
+        public Task<(ConfigMcpApplyRegistryResponse Response, JsonCliResult Raw)> ApplyRegistryAsync(
+            ConfigMcpRegistryFragmentDocument fragment,
+            CancellationToken ct = default) =>
+            Task.FromResult((new ConfigMcpApplyRegistryResponse
+            {
+                Success = true,
+                Changes = new ConfigMcpApplyChangesDto
+                {
+                    Created = 0,
+                    Updated = 0,
+                    Skipped = 1
+                },
+                Warnings =
+                [
+                    "infobaseId test: sourcePath directory not found: C:\\missing"
+                ]
+            }, new JsonCliResult { ExitCode = 0 }));
+
+        public Task<(ConfigMcpRebuildIndexResponse Response, JsonCliResult Raw)> RebuildIndexAsync(
+            string databaseId,
+            CancellationToken ct = default) =>
+            Task.FromResult((new ConfigMcpRebuildIndexResponse { Success = true }, new JsonCliResult { ExitCode = 0 }));
     }
 }

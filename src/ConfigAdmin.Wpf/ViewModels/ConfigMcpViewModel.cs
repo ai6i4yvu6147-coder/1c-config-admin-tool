@@ -29,6 +29,7 @@ public sealed class ConfigMcpViewModel : BusyViewModelBase, IRefreshOnNavigate
     private ConfigMcpInstanceLinkItem? _selectedInstance;
     private McpProjectOption? _selectedMcpProject;
     private McpDatabaseOption? _selectedMcpDatabase;
+    private string? _linkBlockedReason;
 
     public ConfigMcpViewModel(
         ConfigMcpSyncService syncService,
@@ -100,6 +101,7 @@ public sealed class ConfigMcpViewModel : BusyViewModelBase, IRefreshOnNavigate
             SetProperty(ref _selectedInstance, value);
             if (value is not null)
                 ApplySelectionDefaults(value);
+            _ = UpdateLinkAvailabilityAsync();
             CommandManager.InvalidateRequerySuggested();
         }
     }
@@ -117,6 +119,7 @@ public sealed class ConfigMcpViewModel : BusyViewModelBase, IRefreshOnNavigate
             if (SelectedMcpDatabase is null && McpDatabases.Count > 0)
                 SelectedMcpDatabase = McpDatabases[0];
 
+            _ = UpdateLinkAvailabilityAsync();
             CommandManager.InvalidateRequerySuggested();
         }
     }
@@ -141,6 +144,7 @@ public sealed class ConfigMcpViewModel : BusyViewModelBase, IRefreshOnNavigate
                 }
             }
 
+            _ = UpdateLinkAvailabilityAsync();
             CommandManager.InvalidateRequerySuggested();
         }
     }
@@ -185,15 +189,27 @@ public sealed class ConfigMcpViewModel : BusyViewModelBase, IRefreshOnNavigate
 
             McpProjects.Clear();
             McpProjects.Add(McpProjectOption.CreateNew());
+            var registryByProjectId = File.Exists(RegistryFilePath)
+                ? ConfigMcpProjectsJsonMerger.LoadProjects(RegistryFilePath)
+                    .ToDictionary(p => p.ProjectId, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, ConfigMcpProjectsJsonMerger.ProjectEntry>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var project in status.Projects.OrderBy(p => p.Name))
             {
                 if (!Guid.TryParse(project.ProjectId, out var projectId))
                     continue;
 
+                registryByProjectId.TryGetValue(project.ProjectId, out var registryEntry);
+                Guid? clientId = registryEntry?.ClientId is string clientIdText &&
+                                 Guid.TryParse(clientIdText, out var parsedClientId)
+                    ? parsedClientId
+                    : null;
+
                 McpProjects.Add(new McpProjectOption
                 {
                     ProjectId = projectId,
                     Name = project.Name,
+                    ClientId = clientId,
                     Active = project.Active,
                     DatabaseCount = project.Databases.Count,
                     Databases = project.Databases
@@ -261,11 +277,18 @@ public sealed class ConfigMcpViewModel : BusyViewModelBase, IRefreshOnNavigate
             SelectedMcpProject = projectInMcp;
         else
         {
+            var matchingByClientId = McpProjects.FirstOrDefault(p =>
+                !p.IsCreateNew &&
+                p.ClientId is Guid clientId &&
+                clientId == item.ClientId);
+
             var matchingByClient = McpProjects.FirstOrDefault(p =>
                 !p.IsCreateNew &&
                 string.Equals(p.Name, item.ClientName, StringComparison.OrdinalIgnoreCase));
 
-            SelectedMcpProject = matchingByClient
+            SelectedMcpProject = matchingByClientId
+                ?? matchingByClient
+                ?? McpProjects.FirstOrDefault(p => !p.IsCreateNew)
                 ?? McpProjects.FirstOrDefault(p => p.IsCreateNew)
                 ?? McpProjects.FirstOrDefault();
         }
@@ -391,7 +414,21 @@ public sealed class ConfigMcpViewModel : BusyViewModelBase, IRefreshOnNavigate
         SelectedInstance is not null &&
         SelectedMcpProject is not null &&
         SelectedMcpDatabase is not null &&
-        !IsBusy;
+        !IsBusy &&
+        _linkBlockedReason is null;
+
+    private async Task UpdateLinkAvailabilityAsync()
+    {
+        _linkBlockedReason = null;
+        if (SelectedInstance is null || SelectedMcpProject is not { IsCreateNew: true })
+            return;
+
+        _linkBlockedReason = await _syncService.ValidateNewProjectLinkAsync(
+            SelectedInstance.DefaultNewProjectName,
+            SelectedInstance.InstanceId);
+
+        CommandManager.InvalidateRequerySuggested();
+    }
 
     private async Task LinkSelectedAsync()
     {
@@ -592,6 +629,7 @@ public sealed class McpProjectOption
 {
     public bool IsCreateNew { get; init; }
     public Guid ProjectId { get; init; }
+    public Guid? ClientId { get; init; }
     public string Name { get; init; } = string.Empty;
     public bool Active { get; init; }
     public int DatabaseCount { get; init; }

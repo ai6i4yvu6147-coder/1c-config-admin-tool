@@ -6,7 +6,7 @@
 
 
 
-- **Протокол:** v1 + addendum v1.0.1 + v1.0.2 (см. [`protocol-v1.md`](protocol-v1.md) и addendum в этом каталоге).
+- **Протокол:** v1 + addenda v1.0.1–v1.0.4 (канон: [`../group/shared/`](../group/shared/); указатели — [`protocol-v1.md`](protocol-v1.md) и addendum в этом каталоге).
 
 - **Роль:** ConfigAdmin = **Admin Hub implementation** + managed tool `config-admin` (v1.0.2 §1, §12).
 
@@ -19,6 +19,8 @@
 - **Planned-path привязка до выгрузки:** **готово** — `ConfigMcpProjectsJsonMerger` пишет `projects.json`, если CLI пропустил database из‑за отсутствия каталога; UTF-8 с читаемой кириллицей.
 
 - **Registry mapping (Hub ↔ config-mcp):** **согласовано 2026-06-28** — см. [`registry-mapping.md`](registry-mapping.md).
+
+- **Registry mapping (Hub ↔ data-mcp):** **agreed** (ack 2026-07-01) — см. [`registry-mapping-data-mcp.md`](registry-mapping-data-mcp.md), [`protocol-v1.0.4-addendum.md`](../group/shared/protocol-v1.0.4-addendum.md).
 
 - **ConfigAdmin protocol CLI** (inventory/status/export-registry для самого Hub): не начато.
 
@@ -183,6 +185,12 @@ Portable config-mcp (проверенный путь): `C:\1c_config_mcp_server_
 
 Архив: [`registry-mapping-config-mcp-response-2026-06-28.md`](registry-mapping-config-mcp-response-2026-06-28.md), [`registry-mapping-hub-response-2026-06-28.md`](registry-mapping-hub-response-2026-06-28.md).
 
+### Согласованный mapping (data-mcp)
+
+**Статус:** agreed + Sub ack 2026-07-01. **Канон:** [`registry-mapping-data-mcp.md`](registry-mapping-data-mcp.md), protocol [`protocol-v1.0.4-addendum.md`](../group/shared/protocol-v1.0.4-addendum.md).
+
+Кратко: S3 keys только в `credentials.sealed.json`; Hub хранит D-MCP password (managed); агент — refs через `resolve_infobase_context`, без credentials. Hub Phase 1 (D-H1…D-H5) — **ready**, см. [`../todo.md`](../todo.md).
+
 ### Registry fragment (config-mcp) — instance-level linking
 
 `ConfigMcpFragmentBuilder` / экран MCP (2026-06):
@@ -316,7 +324,7 @@ Stale lock threshold (v1.0.2): `rebuild-index` — 3600000 ms (1 ч).
 - **Phase 2:** ConfigAdmin protocol CLI, registry export, locks
 
 - **Phase 3 (config-mcp CLI):** done — rebuild-index CLI
-- **Phase 3 (Hub):** H6 rebuild orchestration — **done**; help-mcp / data-mcp links
+- **Phase 3 (Hub):** H6 rebuild orchestration — **done**; help-mcp links — backlog; **data-mcp** — mapping **agreed + ack** (2026-07-01), Phase 1 Hub implementation **ready**
 
 
 

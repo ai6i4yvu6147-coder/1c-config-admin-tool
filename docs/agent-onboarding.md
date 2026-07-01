@@ -1,77 +1,88 @@
-## Agent onboarding (контекст для ИИ)
+## Agent onboarding (context for AI)
 
-### Тип проекта (WI canon)
+### Project type (WI canon)
 
-| Поле | Значение |
-|------|----------|
-| Роль | **Head (H)** |
-| Группа | `1c-cursor` (`group.manifest.yaml`) |
-| Канон протокола | [`group/shared/`](group/shared/) |
-| Карта Sub | [`group/README.md`](group/README.md) |
+| Field | Value |
+|-------|-------|
+| Role | **Head (H)** |
+| Group | `1c-cursor` (`group.manifest.yaml`) |
+| WI canon | **2.4.0** (`canon_version` in manifest) |
+| Protocol canon | [`group/shared/`](group/shared/) |
+| Sub map | [`group/README.md`](group/README.md) |
 
-Подчинённые: `1c-config-mcp`, `1c-data-mcp`, `1c-help-mcp` (пути в manifest).
+Subordinates: `1c-config-mcp`, `1c-data-mcp`, `1c-help-mcp` (paths in manifest).
 
-### Коротко о проекте
+### Group sync (Head)
 
-**ConfigAdmin** — Windows-утилита для профилей баз 1С и выгрузки основной конфигурации и расширений в XML через `1cv8.exe DESIGNER /DumpConfigToFiles`. Есть WPF UI и headless CLI (`configadmin.exe`).
+| Action | Skill / tool |
+|--------|--------------|
+| Baseline / ripple | **`sync-base`** |
+| Deltas, inbox, dispute / merge / ack | **`sync`** |
+| Packet delivery | operator — [`group/OPERATOR-HANDOFF.md`](group/OPERATOR-HANDOFF.md) |
 
-По протоколу v1.0.2 этот репозиторий — **реализация Admin Hub** (control plane) и одновременно managed tool типа `config-admin`.
+Sync canon: [`canons/group-sync.md`](canons/group-sync.md). Do **not** commit inbox/outbox; delete packets after processing.
 
-### Ключевые политики (не нарушать)
+### Project overview
 
-- **NO_DB_MIGRATIONS**: не писать миграции и конвертации существующих `configadmin.db`. После несовместимых изменений схемы пользователь создаёт БД заново (удаление `%AppData%\ConfigAdmin\` или `--db` на новый файл). Подробнее: [`database.md`](database.md).
-- **Minimum invasive unification**: интеграция с Admin Hub — thin CLI/protocol layer поверх существующего core; не переписывать `ExportOrchestrator`, vault и OneC adapter ради hub.
-- **GUI не центр интеграции**: managed tools вызываются через CLI/subprocess; WPF — UI host, не proxy кнопок MCP.
-- **In-process для себя**: операции ConfigAdmin из Hub — через application services; внешние MCP — subprocess по manifest (protocol v1.0.2 §6).
-- **Секреты**: plain-text пароли в registry sync запрещены; vault и encrypted blobs — local-owned.
-- **Protocol deviation**: отклонения от протокола документировать явно (Deviation, Reason, Impact, Workaround).
+**ConfigAdmin** — Windows utility for 1C infobase profiles and exporting main configuration and extensions to XML via `1cv8.exe DESIGNER /DumpConfigToFiles`. WPF UI and headless CLI (`configadmin.exe`).
 
-### Структура репозитория
+Per protocol v1 + addenda through v1.0.4 ([`group/shared/`](group/shared/)) this repository is the **Admin Hub implementation** (control plane) and simultaneously a managed tool of type `config-admin`.
+
+### Key policies (do not violate)
+
+- **NO_DB_MIGRATIONS**: do not write migrations or conversions for existing `configadmin.db`. After incompatible schema changes the user recreates the DB (delete `%AppData%\ConfigAdmin\` or `--db` to a new file). Details: [`database.md`](database.md).
+- **Minimum invasive unification**: Admin Hub integration — thin CLI/protocol layer over existing core; do not rewrite `ExportOrchestrator`, vault, and OneC adapter for the hub.
+- **GUI is not the integration center**: managed tools are invoked via CLI/subprocess; WPF is a UI host, not an MCP button proxy.
+- **In-process for self**: ConfigAdmin operations from Hub — via application services; external MCP — subprocess per manifest (protocol v1.0.2 §6; see [`group/shared/`](group/shared/) for current addenda).
+- **Secrets**: plain-text passwords in registry sync are forbidden; vault and encrypted blobs are local-owned.
+- **Protocol deviation**: deviations from the protocol must be documented explicitly (Deviation, Reason, Impact, Workaround).
+
+### Repository structure
 
 ```text
 src/
-  ConfigAdmin.Domain/           — модели, интерфейсы
-  ConfigAdmin.Application/      — сценарии (export, profiles, vault, RemoteSync)
-  ConfigAdmin.Infrastructure/   — SQLite, файлы, DI, SecretVault, RemoteSync repos
+  ConfigAdmin.Domain/           — models, interfaces
+  ConfigAdmin.Application/      — scenarios (export, profiles, vault, RemoteSync)
+  ConfigAdmin.Infrastructure/   — SQLite, files, DI, SecretVault, RemoteSync repos
   ConfigAdmin.Integration.OneC/ — 1cv8.exe CLI adapter
   ConfigAdmin.Console/          — configadmin.exe
   ConfigAdmin.Wpf/              — ConfigAdmin.exe (GUI, Hub + Sync Agent UI)
 tests/ConfigAdmin.Tests/
-docs/                           — документация (этот каталог)
-group.manifest.yaml             — Head группы 1c-cursor
-docs/group/shared/              — канон общего протокола (синхронизация с Sub)
-setup-tailscale-funnel.ps1      — Remote Sync: первичная настройка Funnel
-start-sync-tunnel.bat           — Remote Sync: запуск Funnel на :18443
+docs/                           — documentation (this directory)
+group.manifest.yaml             — Head of group 1c-cursor
+docs/group/shared/              — shared protocol canon (synced with Sub)
+setup-tailscale-funnel.ps1      — Remote Sync: initial Funnel setup
+start-sync-tunnel.bat           — Remote Sync: start Funnel on :18443
 ```
 
-Runtime-данные **не** в репозитории: `%AppData%\ConfigAdmin\` (или override через `CONFIGADMIN_DATA_DIR` / `--db`).
+Runtime data is **not** in the repository: `%AppData%\ConfigAdmin\` (or override via `CONFIGADMIN_DATA_DIR` / `--db`).
 
-### Быстрые ссылки
+### Quick links
 
-- Архитектура: [`architecture.md`](architecture.md)
+- Architecture: [`architecture.md`](architecture.md)
 - CLI: [`cli.md`](cli.md)
 - SQLite: [`database.md`](database.md)
 - Backlog: [`todo.md`](todo.md)
-- Группа (H): [`group/README.md`](group/README.md), канон протокола [`group/shared/`](group/shared/)
-- Admin Hub (реализация): [`admin-hub/integration.md`](admin-hub/integration.md)
-- Remote Sync: [`remote-sync/README.md`](remote-sync/README.md) — **R-Ping готово**; статус: [`remote-sync/status.md`](remote-sync/status.md)
+- Group (H): [`group/README.md`](group/README.md), protocol canon [`group/shared/`](group/shared/), sync [`canons/group-sync.md`](canons/group-sync.md), operator [`group/OPERATOR-HANDOFF.md`](group/OPERATOR-HANDOFF.md)
+- Admin Hub (implementation): [`admin-hub/integration.md`](admin-hub/integration.md)
+- Remote Sync: [`remote-sync/README.md`](remote-sync/README.md) — **R-Ping done**; status: [`remote-sync/status.md`](remote-sync/status.md)
 
-### Сборка .NET (агенты)
+### .NET build (agents)
 
-Репозиторий закрепляет SDK в [`global.json`](../global.json) (сейчас **8.0.422**, `rollForward: latestFeature`).
+The repository pins SDK in [`global.json`](../global.json) (currently **8.0.422**, `rollForward: latestFeature`).
 
-На Windows у разработчика и в **shell Cursor-агента** часто два разных `dotnet.exe`:
+On Windows, developer machines and **Cursor agent shell** often have two different `dotnet.exe` paths:
 
-| Путь | Типичное содержимое |
-|------|---------------------|
-| `C:\Program Files\dotnet\dotnet.exe` | Runtime / bootstrapper, **без SDK** |
-| `%USERPROFILE%\.dotnet\dotnet.exe` | Установленный **.NET SDK** (в т.ч. 8.0.422) |
+| Path | Typical contents |
+|------|------------------|
+| `C:\Program Files\dotnet\dotnet.exe` | Runtime / bootstrapper, **no SDK** |
+| `%USERPROFILE%\.dotnet\dotnet.exe` | Installed **.NET SDK** (incl. 8.0.422) |
 
-**Симптом ложной ошибки:** `dotnet build` → `A compatible .NET SDK was not found` / `No .NET SDKs were found`, хотя в обычном терминале IDE сборка проходит.
+**False-error symptom:** `dotnet build` → `A compatible .NET SDK was not found` / `No .NET SDKs were found`, although build works in a normal IDE terminal.
 
-**Не делать:** не списывать на «нормализацию удалила зависимости», не останавливать проверку сборки без диагностики PATH.
+**Do not:** blame "normalization removed dependencies" or stop build verification without PATH diagnosis.
 
-**Перед выводом «SDK нет»** выполнить:
+**Before concluding "SDK missing"** run:
 
 ```powershell
 where.exe dotnet
@@ -79,9 +90,9 @@ where.exe dotnet
 dotnet --list-sdks
 ```
 
-Если SDK виден только во второй команде — проблема в **порядке PATH**, не в репозитории.
+If SDK appears only in the second command — **PATH order** issue, not the repository.
 
-**Сборка из shell агента (PowerShell):**
+**Build from agent shell (PowerShell):**
 
 ```powershell
 $env:PATH = "$env:USERPROFILE\.dotnet;" + $env:PATH
@@ -89,6 +100,10 @@ dotnet build
 dotnet test tests/ConfigAdmin.Tests
 ```
 
-Альтернатива: явный путь `& "$env:USERPROFILE\.dotnet\dotnet.exe" build`.
+Alternative: explicit path `& "$env:USERPROFILE\.dotnet\dotnet.exe" build`.
 
-**Контекст инцидента (2026-06-30):** агент сообщил об отсутствии SDK; после приоритизации `%USERPROFILE%\.dotnet` сборка прошла, вскрылись реальные ошибки компиляции в WPF (не связанные с нормализацией).
+**Incident context (2026-06-30):** agent reported missing SDK; after prioritizing `%USERPROFILE%\.dotnet` build succeeded, revealing real WPF compile errors (unrelated to normalization).
+
+### Tests and config-mcp portable
+
+Unit tests **must not** call real `1c-config-cli` and **must not** write to `C:\1c_config_mcp_server_Portable\projects.json` (or other production portable). Use `FakeConfigMcpToolClient` / temp root under `%TEMP%` (see `ConfigMcpSyncServiceTests`). If an integration test changes the registry — mandatory teardown: remove created `projectId` from `projects.json` in `finally`.

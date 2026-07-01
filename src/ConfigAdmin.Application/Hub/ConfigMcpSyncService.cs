@@ -14,7 +14,7 @@ public sealed class ConfigMcpSyncService
     private readonly IHubProjectRepository _hubProjectRepository;
     private readonly IConfigurationInstanceRepository _instanceRepository;
     private readonly ConfigMcpFragmentBuilder _fragmentBuilder;
-    private readonly ConfigMcpToolClient _toolClient;
+    private readonly IConfigMcpToolClient _toolClient;
     private readonly ManagedToolRegistryService _registryService;
     private readonly InfobaseConfigurationService _configurationService;
     private readonly ConfigMcpProjectsJsonMerger _projectsJsonMerger;
@@ -26,7 +26,7 @@ public sealed class ConfigMcpSyncService
         IHubProjectRepository hubProjectRepository,
         IConfigurationInstanceRepository instanceRepository,
         ConfigMcpFragmentBuilder fragmentBuilder,
-        ConfigMcpToolClient toolClient,
+        IConfigMcpToolClient toolClient,
         ManagedToolRegistryService registryService,
         InfobaseConfigurationService configurationService,
         ConfigMcpProjectsJsonMerger projectsJsonMerger,
@@ -281,13 +281,10 @@ public sealed class ConfigMcpSyncService
         return null;
     }
 
-    private static bool ShouldTryPlannedPathMerge(
+    internal static bool ShouldTryPlannedPathMerge(
         ConfigMcpApplyRegistryResponse response,
         ConfigMcpSyncResult result)
     {
-        if (result.ChangesCreated + result.ChangesUpdated > 0)
-            return false;
-
         return response.Warnings.Any(HasPathNotFoundWarning);
     }
 
@@ -328,7 +325,8 @@ public sealed class ConfigMcpSyncService
             case ConfigMcpLinkMode.NewProject:
                 if (string.IsNullOrWhiteSpace(request.ProjectName))
                     throw new InvalidOperationException("Укажите имя нового проекта.");
-                var newProjectId = Guid.NewGuid();
+                var existingMcpProjectId = await FindExistingMcpProjectIdForClientAsync(infobase.ClientId, ct);
+                var newProjectId = existingMcpProjectId ?? Guid.NewGuid();
                 var hubProject = await EnsureHubProjectAsync(infobase.ClientId, request.ProjectName.Trim(), ct);
                 infobase.ProjectId = hubProject.Id;
                 await _infobaseRepository.SaveAsync(infobase, ct);
@@ -401,6 +399,12 @@ public sealed class ConfigMcpSyncService
         };
     }
 
+    public Task<string?> ValidateNewProjectLinkAsync(
+        string defaultProjectName,
+        Guid instanceId,
+        CancellationToken ct = default) =>
+        ValidateNewProjectCreationAsync(defaultProjectName, instanceId, ct);
+
     public async Task<ConfigMcpSyncResult> LinkAndSyncInstanceAsync(
         Guid instanceId,
         ConfigMcpLinkSelection selection,
@@ -429,19 +433,37 @@ public sealed class ConfigMcpSyncService
 
         var before = await _instanceRepository.GetByIdAsync(instanceId, ct);
 
+        HashSet<string>? projectIdsBeforeLink = null;
+        string? registryPathForRollback = null;
+        try
+        {
+            registryPathForRollback = await ResolveProjectsJsonPathAsync(ct);
+            projectIdsBeforeLink = ConfigMcpProjectsJsonMerger
+                .LoadProjectIds(registryPathForRollback)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Не удалось прочитать projects.json перед привязкой MCP");
+        }
+
         await LinkInstanceAsync(instanceId, request, ct);
+        var afterLink = await _instanceRepository.GetByIdAsync(instanceId, ct);
+        var linkedProjectId = afterLink?.ConfigMcpProjectId;
         var export = await _configurationService.GetOrCreateCurrentExportAsync(instanceId, ct);
 
         var result = await SyncInstanceAsync(instanceId, ct);
         if (!result.Success)
         {
             await RestoreInstanceLinkAsync(instanceId, before, ct);
+            TryRollbackRegistryProjectAsync(registryPathForRollback, projectIdsBeforeLink, linkedProjectId);
             return result;
         }
 
         if (!IsLinkRegistrySatisfied(request.Mode, result))
         {
             await RestoreInstanceLinkAsync(instanceId, before, ct);
+            TryRollbackRegistryProjectAsync(registryPathForRollback, projectIdsBeforeLink, linkedProjectId);
             return Fail(BuildNoRegistryChangesMessage(request.Mode, result), result);
         }
 
@@ -720,14 +742,39 @@ public sealed class ConfigMcpSyncService
             ? await _clientRepository.GetByIdAsync(infobase.ClientId, ct)
             : null;
 
-        var clientName = client?.Name ?? string.Empty;
+        if (client is null)
+            return null;
+
+        var clientName = client.Name ?? string.Empty;
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(defaultProjectName))
             candidates.Add(defaultProjectName.Trim());
         if (!string.IsNullOrWhiteSpace(clientName))
             candidates.Add(clientName.Trim());
-        if (client is not null)
-            candidates.Add(client.Id.ToString());
+        candidates.Add(client.Id.ToString());
+
+        try
+        {
+            var registryPath = await ResolveProjectsJsonPathAsync(ct);
+            foreach (var project in ConfigMcpProjectsJsonMerger.LoadProjects(registryPath))
+            {
+                if (string.Equals(project.ClientId, client.Id.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return $"У клиента «{clientName}» уже есть проект в config-mcp («{project.Name}»). " +
+                           "Выберите существующий проект и строку «— Создать новую database —».";
+                }
+
+                if (candidates.Contains(project.Name))
+                {
+                    return $"Проект «{project.Name}» уже есть в config-mcp. " +
+                           "Выберите существующий проект и строку «— Создать новую database —».";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Не удалось проверить projects.json перед созданием проекта MCP");
+        }
 
         try
         {
@@ -743,10 +790,52 @@ public sealed class ConfigMcpSyncService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Не удалось проверить projects.json перед созданием проекта MCP");
+            _logger.LogWarning(ex, "Не удалось проверить status config-mcp перед созданием проекта MCP");
         }
 
         return null;
+    }
+
+    private async Task<Guid?> FindExistingMcpProjectIdForClientAsync(Guid clientId, CancellationToken ct)
+    {
+        try
+        {
+            var registryPath = await ResolveProjectsJsonPathAsync(ct);
+            var match = ConfigMcpProjectsJsonMerger.LoadProjects(registryPath)
+                .FirstOrDefault(p => string.Equals(p.ClientId, clientId.ToString(), StringComparison.OrdinalIgnoreCase));
+
+            if (match is not null && Guid.TryParse(match.ProjectId, out var projectId))
+                return projectId;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Не удалось найти существующий проект MCP для clientId {ClientId}", clientId);
+        }
+
+        return null;
+    }
+
+    private void TryRollbackRegistryProjectAsync(
+        string? registryPath,
+        HashSet<string>? projectIdsBeforeLink,
+        Guid? linkedProjectId)
+    {
+        if (registryPath is null || projectIdsBeforeLink is null || linkedProjectId is not Guid projectId)
+            return;
+
+        if (projectIdsBeforeLink.Contains(projectId.ToString()))
+            return;
+
+        if (!_projectsJsonMerger.TryRemoveProjects(registryPath, [projectId.ToString()], out _, out var error))
+        {
+            if (error is not null)
+            {
+                _logger.LogWarning(
+                    "Не удалось удалить проект MCP {ProjectId} после отката привязки: {Error}",
+                    projectId,
+                    error);
+            }
+        }
     }
 
     private static ConfigMcpSyncResult Fail(string message, ConfigMcpSyncResult? source = null) => new()

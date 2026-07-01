@@ -17,6 +17,107 @@ public sealed class ConfigMcpProjectsJsonMerger
         WriteIndented = true,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
+
+    public sealed record ProjectEntry(string ProjectId, string Name, string? ClientId, int DatabaseCount);
+
+    public static IReadOnlyList<string> LoadProjectIds(string projectsJsonPath)
+    {
+        if (!File.Exists(projectsJsonPath))
+            return [];
+
+        var root = LoadRoot(projectsJsonPath);
+        var projects = root["projects"] as JsonArray ?? new JsonArray();
+        var ids = new List<string>();
+        foreach (var item in projects)
+        {
+            if (item is not JsonObject obj)
+                continue;
+
+            var id = obj["id"]?.GetValue<string>();
+            if (!string.IsNullOrWhiteSpace(id))
+                ids.Add(id);
+        }
+
+        return ids;
+    }
+
+    public static IReadOnlyList<ProjectEntry> LoadProjects(string projectsJsonPath)
+    {
+        if (!File.Exists(projectsJsonPath))
+            return [];
+
+        var root = LoadRoot(projectsJsonPath);
+        var projects = root["projects"] as JsonArray ?? new JsonArray();
+        var entries = new List<ProjectEntry>();
+        foreach (var item in projects)
+        {
+            if (item is not JsonObject obj)
+                continue;
+
+            var id = obj["id"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(id))
+                continue;
+
+            var name = obj["name"]?.GetValue<string>() ?? string.Empty;
+            var clientId = obj["clientId"]?.GetValue<string>();
+            var databases = obj["databases"] as JsonArray ?? new JsonArray();
+            entries.Add(new ProjectEntry(id, name, clientId, databases.Count));
+        }
+
+        return entries;
+    }
+
+    public bool TryRemoveProjects(
+        string projectsJsonPath,
+        IReadOnlyCollection<string> projectIds,
+        out int removed,
+        out string? error)
+    {
+        removed = 0;
+        error = null;
+
+        if (projectIds.Count == 0)
+            return true;
+
+        try
+        {
+            if (!File.Exists(projectsJsonPath))
+                return true;
+
+            var root = LoadRoot(projectsJsonPath);
+            var projects = root["projects"] as JsonArray ?? new JsonArray();
+            var toRemove = new HashSet<string>(projectIds, StringComparer.OrdinalIgnoreCase);
+            var kept = new JsonArray();
+
+            foreach (var item in projects)
+            {
+                if (item is not JsonObject obj)
+                    continue;
+
+                var id = obj["id"]?.GetValue<string>();
+                if (id is not null && toRemove.Contains(id))
+                {
+                    removed++;
+                    continue;
+                }
+
+                kept.Add(JsonNode.Parse(obj.ToJsonString())!.AsObject());
+            }
+
+            if (removed == 0)
+                return true;
+
+            root["projects"] = kept;
+            WriteAtomic(projectsJsonPath, root);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
     public bool TryMergePlannedRegistry(
         string projectsJsonPath,
         ConfigMcpRegistryFragmentDocument fragment,

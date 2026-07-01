@@ -1,23 +1,23 @@
-## Архитектура
+## Architecture
 
-### Назначение
+### Purpose
 
-ConfigAdmin хранит профили клиентов и инфобаз 1С, выполняет пакетную выгрузку конфигурации и расширений в XML и ведёт журнал запусков. Выгрузка пригодна для MCP конфигураций и других инструментов, работающих с исходниками на диске.
+ConfigAdmin stores client and 1C infobase profiles, performs batch export of configuration and extensions to XML, and maintains a run journal. Export output is suitable for configuration MCP and other tools working with on-disk sources.
 
-### Слои решения
+### Solution layers
 
-| Проект | Назначение |
-|--------|------------|
-| `ConfigAdmin.Domain` | Модели, enum, интерфейсы репозиториев и сервисов |
-| `ConfigAdmin.Application` | `ExportOrchestrator`, `ProfileService`, `ExportService`, vault-сессия |
-| `ConfigAdmin.Infrastructure` | SQLite (Dapper), `SecretVault`, пути, atomic replace каталогов |
+| Project | Purpose |
+|---------|---------|
+| `ConfigAdmin.Domain` | Models, enums, repository and service interfaces |
+| `ConfigAdmin.Application` | `ExportOrchestrator`, `ProfileService`, `ExportService`, vault session |
+| `ConfigAdmin.Infrastructure` | SQLite (Dapper), `SecretVault`, paths, atomic directory replace |
 | `ConfigAdmin.Integration.OneC` | `OneCCliAdapter`, `OneCCommandBuilder`, `ProcessRunner` |
 | `ConfigAdmin.Console` | CLI (`System.CommandLine`) |
 | `ConfigAdmin.Wpf` | Desktop UI (MVVM) |
 
-WPF и Console используют один DI-контур: `AddConfigAdminApplication()`.
+WPF and Console share one DI container: `AddConfigAdminApplication()`.
 
-### Поток выгрузки
+### Export flow
 
 ```mermaid
 flowchart LR
@@ -34,16 +34,16 @@ flowchart LR
   EO --> DB
 ```
 
-1. Загрузка профиля базы и клиента из SQLite.
-2. Расшифровка пароля базы (если vault unlocked).
-3. Шаги: основная конфигурация → все расширения или выбранные.
-4. Каждый шаг — subprocess `1cv8.exe` с `/DumpConfigToFiles`, `/Out`, `/DumpResult`. См. [`onec-cli-reference.md`](onec-cli-reference.md).
-5. Temp-каталог → atomic replace целевых каталогов в `{ExportRoot}`.
-6. Запись `export_runs` и артефактов в `%AppData%\ConfigAdmin\runs\`.
+1. Load infobase and client profile from SQLite.
+2. Decrypt infobase password (if vault unlocked).
+3. Steps: main configuration → all extensions or selected ones.
+4. Each step — subprocess `1cv8.exe` with `/DumpConfigToFiles`, `/Out`, `/DumpResult`. See [`onec-cli-reference.md`](onec-cli-reference.md).
+5. Temp directory → atomic replace of target directories under `{ExportRoot}`.
+6. Write `export_runs` and artifacts to `%AppData%\ConfigAdmin\runs\`.
 
-### Каталоги данных
+### Data directories
 
-**Выгрузка (пользовательский арtefact):**
+**Export (user artifact):**
 
 ```text
 {ExportRoot}/{ClientName}/{BaseName}/
@@ -51,7 +51,7 @@ flowchart LR
   {ИмяРасширения}/
 ```
 
-**Служебные данные приложения:**
+**Application service data:**
 
 ```text
 %AppData%\ConfigAdmin/
@@ -63,23 +63,23 @@ flowchart LR
     {step}.dumpresult
 ```
 
-### Admin Hub (направление)
+### Admin Hub (direction)
 
-Canonical Hub model персистится в `configadmin.db` (protocol v1.0.2). Orchestration внешних MCP — subprocess по `module.manifest.json`. См. [`admin-hub/integration.md`](admin-hub/integration.md).
+Canonical Hub model persists in `configadmin.db` (protocol v1 + addenda through v1.0.4). External MCP orchestration — subprocess per `module.manifest.json`. See [`admin-hub/integration.md`](admin-hub/integration.md).
 
 ### Remote Sync
 
-Доставка XML с RDP на локальный `{ExportRoot}`; MCP локально. Один exe, режимы **Админка** | **Передатчик**; HTTPS chunk upload с докачкой.
+XML delivery from RDP to local `{ExportRoot}`; MCP runs locally. Single exe, modes **Admin** | **Relay**; HTTPS chunk upload with resume.
 
-**Phase R-Ping готово** (register/heartbeat, Tailscale Funnel, E2E с RDP). Upload — в работе (R1).
+**Phase R-Ping done** (register/heartbeat, Tailscale Funnel, E2E with RDP). Upload — in progress (R1).
 
-Код: `src/ConfigAdmin.Application/RemoteSync/`, WPF: `HubModeSelectorView`, `RemoteNodesView`, `SyncAgentView`.
+Code: `src/ConfigAdmin.Application/RemoteSync/`, WPF: `HubModeSelectorView`, `RemoteNodesView`, `SyncAgentView`.
 
-Документация: [`remote-sync/README.md`](remote-sync/README.md), статус: [`remote-sync/status.md`](remote-sync/status.md).
+Documentation: [`remote-sync/README.md`](remote-sync/README.md), status: [`remote-sync/status.md`](remote-sync/status.md).
 
-### Тесты
+### Tests
 
-Unit-тесты: `tests/ConfigAdmin.Tests` — orchestrator, command builder, vault, log reader.
+Unit tests: `tests/ConfigAdmin.Tests` — orchestrator, command builder, vault, log reader.
 
 ```powershell
 dotnet test tests/ConfigAdmin.Tests

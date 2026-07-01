@@ -27,6 +27,7 @@ public static class DependencyInjection
         services.AddSingleton<ConfiguratorLaunchService>();
         services.AddSingleton<ManagedToolRegistryService>();
         services.AddSingleton<ConfigMcpToolClient>();
+        services.AddSingleton<IConfigMcpToolClient>(sp => sp.GetRequiredService<ConfigMcpToolClient>());
         services.AddSingleton<ConfigMcpFragmentBuilder>();
         services.AddSingleton<ConfigMcpProjectsJsonMerger>();
         services.AddSingleton<ConfigMcpSyncService>();

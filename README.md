@@ -1,14 +1,14 @@
-# ConfigAdmin — утилита выгрузки конфигураций 1С
+# ConfigAdmin — 1C configuration export utility
 
-Локальная Windows-утилита для профилей баз 1С и выгрузки конфигурации/расширений в XML (`1cv8.exe DESIGNER /DumpConfigToFiles`). По протоколу v1.0.2 — **Admin Hub** экосистемы 1С AI tooling.
+Local Windows utility for 1C infobase profiles and exporting configuration/extensions to XML (`1cv8.exe DESIGNER /DumpConfigToFiles`). Per protocol v1.0.2 — **Admin Hub** of the 1C AI tooling ecosystem.
 
-## Требования
+## Requirements
 
 - Windows
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- Платформа 1С (`1cv8.exe`)
+- 1C platform (`1cv8.exe`)
 
-## Быстрый старт
+## Quick start
 
 ```powershell
 git clone https://github.com/ai6i4yvu6147-coder/1c-config-admin-tool.git
@@ -23,7 +23,7 @@ Self-contained exe:
 build-all-single.bat   # dist\console-single\configadmin.exe, dist\wpf-single\ConfigAdmin.exe
 ```
 
-## CLI (кратко)
+## CLI (brief)
 
 ```powershell
 dotnet run --project src/ConfigAdmin.Console -- init-vault --password "..."
@@ -32,35 +32,35 @@ dotnet run --project src/ConfigAdmin.Console -- add-base --client ClientA --name
 dotnet run --project src/ConfigAdmin.Console -- export --base BaseERP --password "..."
 ```
 
-Полный список команд: [`docs/cli.md`](docs/cli.md).
+Full command list: [`docs/cli.md`](docs/cli.md).
 
-## Документация
+## Documentation
 
-| Раздел | Файл |
-|--------|------|
-| Оглавление | [`docs/README.md`](docs/README.md) |
-| Агентам / политики | [`docs/agent-onboarding.md`](docs/agent-onboarding.md) |
-| Архитектура | [`docs/architecture.md`](docs/architecture.md) |
+| Section | File |
+|---------|------|
+| Index | [`docs/README.md`](docs/README.md) |
+| Agents / policies | [`docs/agent-onboarding.md`](docs/agent-onboarding.md) |
+| Architecture | [`docs/architecture.md`](docs/architecture.md) |
 | SQLite | [`docs/database.md`](docs/database.md) |
 | Backlog | [`docs/todo.md`](docs/todo.md) |
 | Admin Hub | [`docs/admin-hub/integration.md`](docs/admin-hub/integration.md) |
 | Remote Sync | [`docs/remote-sync/status.md`](docs/remote-sync/status.md) |
 
-Для агентов: [`AGENTS.md`](AGENTS.md).
+For agents: [`AGENTS.md`](AGENTS.md).
 
-## Тесты
+## Tests
 
 ```powershell
 dotnet test tests/ConfigAdmin.Tests
 ```
 
-## Безопасность
+## Security
 
-- Мастер-пароль не хранится на диске
-- Пароли баз — AES-GCM (ключ Argon2id)
-- В логах команд пароль маскируется (`/P"***"`)
+- Master password is not stored on disk
+- Infobase passwords — AES-GCM (Argon2id key)
+- Command logs mask passwords (`/P"***"`)
 
-## 1С
+## 1C
 
-- [Параметры командной строки](https://its.1c.ru/db/v8317doc/bookmark/adm/TI000000493)
+- [Command-line parameters](https://its.1c.ru/db/v8317doc/bookmark/adm/TI000000493)
 - [/DumpConfigToFiles](https://yellow-erp.com/help/1cv8/zif3_dumpconfigtofiles/?lang=ru)
