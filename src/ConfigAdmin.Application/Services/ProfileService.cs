@@ -31,9 +31,15 @@ public sealed class ProfileService
         string name,
         string exportRoot,
         string? comment = null,
+        Guid? clientId = null,
         CancellationToken ct = default)
     {
-        var existing = await _clientRepository.GetByNameAsync(name, ct);
+        ClientProfile? existing = null;
+        if (clientId is Guid id)
+            existing = await _clientRepository.GetByIdAsync(id, ct);
+
+        existing ??= await _clientRepository.GetByNameAsync(name, ct);
+
         var client = existing ?? new ClientProfile { Id = Guid.NewGuid() };
         client.Name = name;
         client.ExportRootPath = exportRoot;

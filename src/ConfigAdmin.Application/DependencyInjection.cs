@@ -38,6 +38,7 @@ public static class DependencyInjection
         services.AddSingleton<SyncUploadCompleter>();
         services.AddSingleton<RemoteConfigurationExportService>();
         services.AddSingleton<AgentWorkDirectoryResolver>();
+        services.AddSingleton<AgentDataCleanupService>();
         services.AddSingleton<AgentResumeStore>();
         services.AddSingleton<SyncAgentJobProcessor>();
         services.AddSingleton<SyncAgentHubService>();

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Windows.Input;
 using ConfigAdmin.Application.Services;
 using ConfigAdmin.Wpf.Services;
 
@@ -19,13 +20,13 @@ public sealed class MainViewModel : ObservableObject, IRefreshOnNavigate
     private readonly ConfigMcpViewModel _configMcpViewModel;
     private readonly RemoteNodesViewModel _remoteNodesViewModel;
     private readonly ConfigurationTemplatesViewModel _templatesViewModel;
+    private readonly HubSettingsViewModel _hubSettingsViewModel;
     private readonly LogsViewModel _logsViewModel;
     private readonly ConfiguratorLaunchService _configuratorLaunchService;
 
     private ClientListItem? _selectedClient;
     private InfobaseListItem? _selectedBase;
     private string _statusMessage = string.Empty;
-    private bool _isBusy;
 
     public MainViewModel(
         ProfileService profileService,
@@ -39,6 +40,7 @@ public sealed class MainViewModel : ObservableObject, IRefreshOnNavigate
         ConfigMcpViewModel configMcpViewModel,
         RemoteNodesViewModel remoteNodesViewModel,
         ConfigurationTemplatesViewModel templatesViewModel,
+        HubSettingsViewModel hubSettingsViewModel,
         LogsViewModel logsViewModel,
         ConfiguratorLaunchService configuratorLaunchService)
     {
@@ -53,23 +55,25 @@ public sealed class MainViewModel : ObservableObject, IRefreshOnNavigate
         _configMcpViewModel = configMcpViewModel;
         _remoteNodesViewModel = remoteNodesViewModel;
         _templatesViewModel = templatesViewModel;
+        _hubSettingsViewModel = hubSettingsViewModel;
         _logsViewModel = logsViewModel;
         _configuratorLaunchService = configuratorLaunchService;
 
         Clients = new ObservableCollection<ClientListItem>();
         Bases = new ObservableCollection<InfobaseListItem>();
         RefreshCommand = new RelayCommand(RefreshAsync);
-        AddClientCommand = new RelayCommand(AddClient);
-        EditClientCommand = new RelayCommand(EditClient, () => SelectedClient is not null);
-        AddBaseCommand = new RelayCommand(AddBase);
-        EditBaseCommand = new RelayCommand(EditBase, () => SelectedBase is not null);
-        ExportCommand = new RelayCommand(Export, () => SelectedBase is not null && !IsBusy);
+        AddClientCommand = new RelayCommand(AddClientAsync);
+        EditClientCommand = new RelayCommand(EditClientAsync, () => SelectedClient is not null);
+        AddBaseCommand = new RelayCommand(AddBaseAsync);
+        EditBaseCommand = new RelayCommand(EditBaseAsync, () => SelectedBase is not null);
+        ExportCommand = new RelayCommand(ExportAsync, () => SelectedBase is not null);
         OpenFolderCommand = new RelayCommand(OpenFolder, () => SelectedBase is not null);
         OpenLogsCommand = new RelayCommand(OpenLogs, () => SelectedBase is not null);
         OpenAllLogsCommand = new RelayCommand(OpenAllLogs);
         OpenMcpCommand = new RelayCommand(OpenMcp);
         OpenRemoteNodesCommand = new RelayCommand(OpenRemoteNodes);
         OpenTemplatesCommand = new RelayCommand(OpenTemplates);
+        OpenSettingsCommand = new RelayCommand(OpenSettings);
         OpenConfiguratorCommand = new RelayCommand(OpenConfiguratorAsync, () => SelectedBase is not null);
         LockCommand = new RelayCommand(Lock);
 
@@ -82,25 +86,27 @@ public sealed class MainViewModel : ObservableObject, IRefreshOnNavigate
     public ClientListItem? SelectedClient
     {
         get => _selectedClient;
-        set => SetProperty(ref _selectedClient, value);
+        set
+        {
+            SetProperty(ref _selectedClient, value);
+            CommandManager.InvalidateRequerySuggested();
+        }
     }
 
     public InfobaseListItem? SelectedBase
     {
         get => _selectedBase;
-        set => SetProperty(ref _selectedBase, value);
+        set
+        {
+            SetProperty(ref _selectedBase, value);
+            CommandManager.InvalidateRequerySuggested();
+        }
     }
 
     public string StatusMessage
     {
         get => _statusMessage;
         set => SetProperty(ref _statusMessage, value);
-    }
-
-    public bool IsBusy
-    {
-        get => _isBusy;
-        set => SetProperty(ref _isBusy, value);
     }
 
     public RelayCommand RefreshCommand { get; }
@@ -115,6 +121,7 @@ public sealed class MainViewModel : ObservableObject, IRefreshOnNavigate
     public RelayCommand OpenMcpCommand { get; }
     public RelayCommand OpenRemoteNodesCommand { get; }
     public RelayCommand OpenTemplatesCommand { get; }
+    public RelayCommand OpenSettingsCommand { get; }
     public RelayCommand OpenConfiguratorCommand { get; }
     public RelayCommand LockCommand { get; }
 
@@ -138,11 +145,12 @@ public sealed class MainViewModel : ObservableObject, IRefreshOnNavigate
         }
 
         var bases = await _profileService.GetInfobasesAsync();
+        var exportSummaries = await _configurationService.GetExportSummariesForAllBasesAsync();
         Bases.Clear();
         foreach (var profile in bases.OrderBy(b => b.Name))
         {
             clientMap.TryGetValue(profile.ClientId, out var client);
-            var instances = await _configurationService.GetInstancesAsync(profile.Id);
+            exportSummaries.TryGetValue(profile.Id, out var summary);
             Bases.Add(new InfobaseListItem
             {
                 Id = profile.Id,
@@ -151,7 +159,7 @@ public sealed class MainViewModel : ObservableObject, IRefreshOnNavigate
                 ConnectionType = profile.ConnectionType,
                 LastExportStatus = profile.LastExportStatus,
                 LastExportAt = profile.LastExportAt,
-                ExportSettingsSummary = InfobaseConfigurationService.BuildExportSummary(instances)
+                ExportSettingsSummary = summary ?? "не задано"
             });
         }
 
@@ -161,42 +169,56 @@ public sealed class MainViewModel : ObservableObject, IRefreshOnNavigate
             StatusMessage = string.Empty;
     }
 
-    private void AddClient()
+    private async Task AddClientAsync()
     {
-        _clientEditViewModel.BeginCreate();
+        if (!await _clientEditViewModel.PrepareCreateAsync())
+            return;
+
         _navigationService.NavigateTo(_clientEditViewModel);
     }
 
-    private void EditClient()
+    private async Task EditClientAsync()
     {
         if (SelectedClient is null)
             return;
 
-        _clientEditViewModel.BeginEdit(SelectedClient.Name);
+        if (!await _clientEditViewModel.PrepareEditAsync(SelectedClient.Name))
+        {
+            StatusMessage = "Клиент не найден.";
+            return;
+        }
+
         _navigationService.NavigateTo(_clientEditViewModel);
     }
 
-    private void AddBase()
+    private async Task AddBaseAsync()
     {
-        _baseEditViewModel.BeginCreate();
+        if (!await _baseEditViewModel.PrepareCreateAsync())
+            return;
+
         _navigationService.NavigateTo(_baseEditViewModel);
     }
 
-    private void EditBase()
+    private async Task EditBaseAsync()
     {
         if (SelectedBase is null)
             return;
 
-        _baseEditViewModel.BeginEdit(SelectedBase.Id);
+        if (!await _baseEditViewModel.PrepareEditAsync(SelectedBase.Id))
+        {
+            StatusMessage = "База не найдена.";
+            return;
+        }
+
         _navigationService.NavigateTo(_baseEditViewModel);
     }
 
-    private void Export()
+    private async Task ExportAsync()
     {
         if (SelectedBase is null)
             return;
 
-        _exportViewModel.Begin(SelectedBase.Id, SelectedBase.DisplayName);
+        await _exportViewModel.BeginAsync(SelectedBase.Id, SelectedBase.DisplayName);
         _navigationService.NavigateTo(_exportViewModel);
     }
 
@@ -251,6 +273,11 @@ public sealed class MainViewModel : ObservableObject, IRefreshOnNavigate
         _navigationService.NavigateTo(_templatesViewModel);
     }
 
+    private void OpenSettings()
+    {
+        _navigationService.NavigateTo(_hubSettingsViewModel);
+    }
+
     private async Task OpenConfiguratorAsync()
     {
         if (SelectedBase is null)
@@ -269,7 +296,6 @@ public sealed class MainViewModel : ObservableObject, IRefreshOnNavigate
 
     private void Lock()
     {
-        _vaultSessionService.Lock();
         _vaultViewModel.LockVault();
         _navigationService.SetRoot<VaultViewModel>();
     }

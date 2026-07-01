@@ -1,20 +1,25 @@
+using System.Windows;
 using System.Windows.Controls;
 using ConfigAdmin.Wpf.ViewModels;
 using ConfigAdmin.Wpf.Views;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 
 namespace ConfigAdmin.Wpf.Services;
 
 public sealed class NavigationService : INavigationService
 {
     private readonly IServiceProvider _serviceProvider;
+    private readonly Dictionary<Type, Func<object, UIElement>> _viewFactories;
     private readonly Stack<object> _backStack = new();
     private ContentControl? _host;
     private object? _current;
+    private BaseEditView? _baseEditView;
 
     public NavigationService(IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider;
+        _viewFactories = BuildViewFactories();
     }
 
     public event Action? NavigationChanged;
@@ -43,7 +48,7 @@ public sealed class NavigationService : INavigationService
 
     public void NavigateTo(object viewModel)
     {
-        if (_current is not null)
+        if (_current is not null && !ReferenceEquals(_current, viewModel))
             _backStack.Push(_current);
 
         Show(viewModel);
@@ -62,27 +67,64 @@ public sealed class NavigationService : INavigationService
         if (_host is null)
             throw new InvalidOperationException("Navigation host не подключён.");
 
+        DetachSingletonViewBindings();
+
         _current = viewModel;
-        _host.Content = viewModel switch
-        {
-            VaultViewModel vm => new VaultView { DataContext = vm },
-            MainViewModel vm => new MainView { DataContext = vm },
-            ClientEditViewModel vm => new ClientEditView { DataContext = vm },
-            BaseEditViewModel vm => new BaseEditView { DataContext = vm },
-            ExportViewModel vm => new ExportView { DataContext = vm },
-            ConfigMcpViewModel vm => new ConfigMcpView { DataContext = vm },
-            LogsViewModel vm => new LogsView { DataContext = vm },
-            HubModeSelectorViewModel vm => new HubModeSelectorView { DataContext = vm },
-            SyncAgentViewModel vm => new SyncAgentView { DataContext = vm },
-            RemoteNodesViewModel vm => new RemoteNodesView { DataContext = vm },
-            RemoteNodeEditViewModel vm => new RemoteNodeEditView { DataContext = vm },
-            ConfigurationTemplatesViewModel vm => new ConfigurationTemplatesView { DataContext = vm },
-            _ => throw new NotSupportedException($"Неподдерживаемая ViewModel: {viewModel.GetType().Name}")
-        };
+        var viewType = viewModel.GetType();
+        if (!_viewFactories.TryGetValue(viewType, out var factory))
+            throw new NotSupportedException($"Неподдерживаемая ViewModel: {viewType.Name}");
+
+        _host.Content = factory(viewModel);
 
         if (viewModel is IRefreshOnNavigate refreshable)
-            _ = refreshable.RefreshOnNavigateAsync();
+            _ = RunRefreshAsync(refreshable);
 
         NavigationChanged?.Invoke();
     }
+
+    private static async Task RunRefreshAsync(IRefreshOnNavigate refreshable)
+    {
+        try
+        {
+            await refreshable.RefreshOnNavigateAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Ошибка обновления экрана {Screen}", refreshable.GetType().Name);
+        }
+    }
+
+    private void DetachSingletonViewBindings()
+    {
+        if (_host?.Content is BaseEditView baseEdit)
+        {
+            baseEdit.ResetPasswordField();
+            baseEdit.DataContext = null;
+        }
+    }
+
+    private BaseEditView GetBaseEditView(BaseEditViewModel vm)
+    {
+        _baseEditView ??= new BaseEditView();
+        _baseEditView.DataContext = vm;
+        return _baseEditView;
+    }
+
+    private Dictionary<Type, Func<object, UIElement>> BuildViewFactories() =>
+        new()
+        {
+            [typeof(VaultViewModel)] = vm => new VaultView { DataContext = vm },
+            [typeof(MainViewModel)] = vm => new MainView { DataContext = vm },
+            [typeof(ClientEditViewModel)] = vm => new ClientEditView { DataContext = vm },
+            [typeof(BaseEditViewModel)] = vm => GetBaseEditView((BaseEditViewModel)vm),
+            [typeof(ExportViewModel)] = vm => new ExportView { DataContext = vm },
+            [typeof(ConfigMcpViewModel)] = vm => new ConfigMcpView { DataContext = vm },
+            [typeof(LogsViewModel)] = vm => new LogsView { DataContext = vm },
+            [typeof(HubModeSelectorViewModel)] = vm => new HubModeSelectorView { DataContext = vm },
+            [typeof(SyncAgentViewModel)] = vm => new SyncAgentView { DataContext = vm },
+            [typeof(RemoteNodesViewModel)] = vm => new RemoteNodesView { DataContext = vm },
+            [typeof(RemoteNodeEditViewModel)] = vm => new RemoteNodeEditView { DataContext = vm },
+            [typeof(ConfigurationTemplatesViewModel)] = vm => new ConfigurationTemplatesView { DataContext = vm },
+            [typeof(HubSettingsViewModel)] = vm => new HubSettingsView { DataContext = vm },
+        };
 }

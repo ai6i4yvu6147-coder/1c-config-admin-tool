@@ -3,6 +3,7 @@ using ConfigAdmin.Domain.Hub;
 using ConfigAdmin.Domain.Models;
 using ConfigAdmin.Domain.Repositories;
 using ConfigAdmin.Application.Services;
+using Microsoft.Extensions.Logging;
 
 namespace ConfigAdmin.Application.Hub;
 
@@ -17,6 +18,7 @@ public sealed class ConfigMcpSyncService
     private readonly ManagedToolRegistryService _registryService;
     private readonly InfobaseConfigurationService _configurationService;
     private readonly ConfigMcpProjectsJsonMerger _projectsJsonMerger;
+    private readonly ILogger<ConfigMcpSyncService> _logger;
 
     public ConfigMcpSyncService(
         IInfobaseRepository infobaseRepository,
@@ -27,7 +29,8 @@ public sealed class ConfigMcpSyncService
         ConfigMcpToolClient toolClient,
         ManagedToolRegistryService registryService,
         InfobaseConfigurationService configurationService,
-        ConfigMcpProjectsJsonMerger projectsJsonMerger)
+        ConfigMcpProjectsJsonMerger projectsJsonMerger,
+        ILogger<ConfigMcpSyncService> logger)
     {
         _infobaseRepository = infobaseRepository;
         _clientRepository = clientRepository;
@@ -38,6 +41,7 @@ public sealed class ConfigMcpSyncService
         _registryService = registryService;
         _configurationService = configurationService;
         _projectsJsonMerger = projectsJsonMerger;
+        _logger = logger;
     }
 
     public async Task<ConfigMcpSyncResult> SyncInstanceAsync(Guid instanceId, CancellationToken ct = default)
@@ -403,7 +407,26 @@ public sealed class ConfigMcpSyncService
         string defaultProjectName,
         CancellationToken ct = default)
     {
+        if (selection.CreateNewProject)
+        {
+            var validationError = await ValidateNewProjectCreationAsync(defaultProjectName, instanceId, ct);
+            if (validationError is not null)
+                return Fail(validationError);
+        }
+
         var request = BuildLinkRequest(selection, defaultProjectName);
+        _logger.LogInformation(
+            "MCP link: instance={InstanceId}, mode={Mode}, defaultProject={DefaultProject}, " +
+            "createNewProject={CreateNewProject}, createNewDatabase={CreateNewDatabase}, " +
+            "projectId={ProjectId}, projectName={ProjectName}",
+            instanceId,
+            request.Mode,
+            defaultProjectName,
+            selection.CreateNewProject,
+            selection.CreateNewDatabase,
+            selection.ProjectId,
+            selection.ProjectName);
+
         var before = await _instanceRepository.GetByIdAsync(instanceId, ct);
 
         await LinkInstanceAsync(instanceId, request, ct);
@@ -681,6 +704,49 @@ public sealed class ConfigMcpSyncService
             : " " + string.Join(" ", op.Args.Select(kv => $"{kv.Key}={kv.Value}"));
 
         return $"{op.Command}{args}: {op.Reason}";
+    }
+
+    private async Task<string?> ValidateNewProjectCreationAsync(
+        string defaultProjectName,
+        Guid instanceId,
+        CancellationToken ct)
+    {
+        var instance = await _instanceRepository.GetByIdAsync(instanceId, ct);
+        if (instance is null)
+            return "Экземпляр не найден.";
+
+        var infobase = await _infobaseRepository.GetByIdAsync(instance.InfobaseId, ct);
+        var client = infobase is not null
+            ? await _clientRepository.GetByIdAsync(infobase.ClientId, ct)
+            : null;
+
+        var clientName = client?.Name ?? string.Empty;
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(defaultProjectName))
+            candidates.Add(defaultProjectName.Trim());
+        if (!string.IsNullOrWhiteSpace(clientName))
+            candidates.Add(clientName.Trim());
+        if (client is not null)
+            candidates.Add(client.Id.ToString());
+
+        try
+        {
+            var status = await _toolClient.GetStatusAsync(ct);
+            foreach (var project in status.Projects)
+            {
+                if (candidates.Contains(project.Name))
+                {
+                    return $"Проект «{project.Name}» уже есть в config-mcp. " +
+                           "Выберите существующий проект и строку «— Создать новую database —».";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Не удалось проверить projects.json перед созданием проекта MCP");
+        }
+
+        return null;
     }
 
     private static ConfigMcpSyncResult Fail(string message, ConfigMcpSyncResult? source = null) => new()

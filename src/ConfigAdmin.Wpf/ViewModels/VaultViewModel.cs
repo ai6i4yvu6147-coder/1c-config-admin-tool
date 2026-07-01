@@ -49,7 +49,18 @@ public sealed class VaultViewModel : ObservableObject
 
     public RelayCommand SubmitCommand { get; }
 
-    public void LockVault() => _vaultSessionService.Lock();
+    public void LockVault()
+    {
+        _vaultSessionService.Lock();
+        ResetForLock();
+    }
+
+    public void ResetForLock()
+    {
+        MasterPassword = string.Empty;
+        ConfirmPassword = string.Empty;
+        StatusMessage = string.Empty;
+    }
 
     private async Task LoadStateAsync()
     {

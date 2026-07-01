@@ -30,7 +30,7 @@ public sealed class RemoteNodeListItem
     }
 }
 
-public sealed class RemoteNodesViewModel : ObservableObject, IRefreshOnNavigate
+public sealed class RemoteNodesViewModel : BusyViewModelBase, IRefreshOnNavigate
 {
     private readonly RemoteNodeService _remoteNodeService;
     private readonly ProfileService _profileService;
@@ -39,9 +39,7 @@ public sealed class RemoteNodesViewModel : ObservableObject, IRefreshOnNavigate
     private readonly RemoteNodeEditViewModel _editViewModel;
 
     private RemoteNodeListItem? _selectedNode;
-    private string _statusMessage = string.Empty;
     private string _receiverStatus = string.Empty;
-    private bool _isBusy;
 
     public RemoteNodesViewModel(
         RemoteNodeService remoteNodeService,
@@ -62,7 +60,6 @@ public sealed class RemoteNodesViewModel : ObservableObject, IRefreshOnNavigate
         AddCommand = new RelayCommand(AddNodeAsync);
         EditCommand = new RelayCommand(EditNodeAsync, () => SelectedNode is not null);
         CopyNodeIdCommand = new RelayCommand(CopyNodeId, () => SelectedNode is not null);
-        BackCommand = new RelayCommand(() => _navigationService.GoBack());
     }
 
     public ObservableCollection<RemoteNodeListItem> Nodes { get; }
@@ -77,33 +74,16 @@ public sealed class RemoteNodesViewModel : ObservableObject, IRefreshOnNavigate
         }
     }
 
-    public string StatusMessage
-    {
-        get => _statusMessage;
-        set => SetProperty(ref _statusMessage, value);
-    }
-
     public string ReceiverStatus
     {
         get => _receiverStatus;
         set => SetProperty(ref _receiverStatus, value);
     }
 
-    public bool IsBusy
-    {
-        get => _isBusy;
-        set
-        {
-            SetProperty(ref _isBusy, value);
-            CommandManager.InvalidateRequerySuggested();
-        }
-    }
-
     public RelayCommand RefreshCommand { get; }
     public RelayCommand AddCommand { get; }
     public RelayCommand EditCommand { get; }
     public RelayCommand CopyNodeIdCommand { get; }
-    public RelayCommand BackCommand { get; }
 
     public Task RefreshOnNavigateAsync() => RefreshAsync();
 

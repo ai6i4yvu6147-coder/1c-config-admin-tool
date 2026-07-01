@@ -12,6 +12,7 @@
                 <Button Content="Шаблоны" Command="{Binding OpenTemplatesCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="MCP" Command="{Binding OpenMcpCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="RDP-узлы" Command="{Binding OpenRemoteNodesCommand}" Margin="0,0,8,0" Padding="10,4" />
+                <Button Content="Настройки" Command="{Binding OpenSettingsCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="Обновить" Command="{Binding RefreshCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="Заблокировать" Command="{Binding LockCommand}" Padding="10,4" />
             </StackPanel>
@@ -21,7 +22,7 @@
                 <Button Content="Логи" Command="{Binding OpenLogsCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="Журнал всех баз" Command="{Binding OpenAllLogsCommand}" Padding="10,4" />
             </StackPanel>
-            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="Gray" />
+            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource HintTextStyle}" />
         </StackPanel>
 
         <Grid>
@@ -45,7 +46,7 @@
             </DockPanel>
 
             <DockPanel Grid.Column="1">
-                <TextBlock DockPanel.Dock="Top" Text="Инфobазы" FontWeight="SemiBold" Margin="0,0,0,4" />
+                <TextBlock DockPanel.Dock="Top" Text="Инфобазы" FontWeight="SemiBold" Margin="0,0,0,4" />
                 <DataGrid ItemsSource="{Binding Bases}"
                           SelectedItem="{Binding SelectedBase}"
                           AutoGenerateColumns="False"

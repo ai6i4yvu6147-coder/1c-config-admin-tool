@@ -6,7 +6,7 @@ using ConfigAdmin.Domain.RemoteSync;
 
 namespace ConfigAdmin.Application.RemoteSync;
 
-public sealed class SyncAgentClient
+public sealed class SyncAgentClient : IDisposable
 {
     /// <summary>JSON API: register, heartbeat, poll.</summary>
     public const int DefaultRequestTimeoutSeconds = 30;
@@ -291,6 +291,8 @@ public sealed class SyncAgentClient
         var message = error?.Error ?? response.ReasonPhrase ?? "Sync agent request failed.";
         throw new SyncAgentClientException(message, (int)response.StatusCode, error?.Code);
     }
+
+    public void Dispose() => _httpClient.Dispose();
 }
 
 public sealed class SyncAgentClientException : Exception

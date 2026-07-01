@@ -62,6 +62,12 @@ public sealed class AgentSettingsStore
         File.WriteAllText(SettingsPath, JsonSerializer.Serialize(stored, JsonOptions));
     }
 
+    public void Clear()
+    {
+        if (File.Exists(SettingsPath))
+            File.Delete(SettingsPath);
+    }
+
     private static string EncryptToken(string plainText)
     {
         var bytes = Encoding.UTF8.GetBytes(plainText);

@@ -5,8 +5,7 @@
         <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                 <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
-                <Button Content="Обновить" Command="{Binding RefreshCommand}" Margin="16,0,8,0" Padding="10,4" />
-                <Button Content="Назад" Command="{Binding BackCommand}" Padding="10,4" />
+                <Button Content="Обновить" Command="{Binding RefreshCommand}" Margin="16,0,0,0" Padding="10,4" />
             </StackPanel>
         </StackPanel>
 

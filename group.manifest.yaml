@@ -1,0 +1,13 @@
+group:
+  id: 1c-cursor
+  canon_version: "2.2.0"
+
+role: head
+
+subordinates:
+  - id: 1c-config-mcp
+    path: C:/projects/1c-config-mcp
+  - id: 1c-data-mcp
+    path: C:/projects/1c-data-mcp
+  - id: 1c-help-mcp
+    path: C:/projects/1c-help-mcp

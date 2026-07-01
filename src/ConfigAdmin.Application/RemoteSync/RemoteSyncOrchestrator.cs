@@ -38,6 +38,7 @@ public sealed class RemoteSyncOrchestrator
     public async Task<IReadOnlyList<SyncJobProfile>> RequestSyncAsync(
         Guid infobaseId,
         bool syncMcpAfterComplete,
+        InstanceExportPlan? planOverride = null,
         CancellationToken ct = default)
     {
         if (!_secretVault.IsUnlocked)
@@ -70,7 +71,7 @@ public sealed class RemoteSyncOrchestrator
         if (active is not null)
             throw new InvalidOperationException("Синхронизация уже выполняется для этой базы.");
 
-        var plan = await _configurationService.BuildExportPlanAsync(infobaseId, ct);
+        var plan = planOverride ?? await _configurationService.BuildExportPlanAsync(infobaseId, ct);
         if (!plan.HasWork)
             throw new InvalidOperationException("План выгрузки пуст — включите конфигурации на базе.");
 

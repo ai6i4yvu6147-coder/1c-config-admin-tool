@@ -1,0 +1,38 @@
+<UserControl x:Class="ConfigAdmin.Wpf.Views.HubSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="{StaticResource FormMaxWidth}">
+            <TextBlock Text="Настройки Hub" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,16" />
+
+            <TextBlock Text="Приёмник Remote Sync (локальный)" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBlock Text="Адрес и порт приёмника на этом ПК"
+                       Style="{StaticResource HintTextStyle}"
+                       Margin="0,0,0,4" />
+            <TextBox Text="{Binding HubListenUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" />
+            <TextBlock Text="Не путать с URL для RDP. Передатчик подключается через Tailscale Funnel; URL для копирования — в карточке RDP-узла. Меняйте порт только при конфликте."
+                       Style="{StaticResource HintTextStyle}"
+                       Margin="0,0,0,8" />
+            <TextBlock Text="{Binding ReceiverStatus}" Margin="0,0,0,16" />
+
+            <Button Content="Сохранить"
+                    Command="{Binding SaveCommand}"
+                    Style="{StaticResource ToolbarButtonStyle}"
+                    Margin="0,0,0,24"
+                    HorizontalAlignment="Left"
+                    FontWeight="SemiBold" />
+
+            <TextBlock Text="Режим приложения" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBlock Text="Вернуться к выбору «Админка» или «Передатчик» на этом компьютере."
+                       Style="{StaticResource HintTextStyle}"
+                       Margin="0,0,0,8" />
+            <Button Content="Сменить режим Hub / Передатчик"
+                    Command="{Binding ResetModeCommand}"
+                    Style="{StaticResource ToolbarButtonStyle}"
+                    HorizontalAlignment="Left"
+                    Margin="0,0,0,12" />
+
+            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource ErrorTextStyle}" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

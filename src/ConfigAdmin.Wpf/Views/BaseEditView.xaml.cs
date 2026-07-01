@@ -3,16 +3,19 @@ using ConfigAdmin.Wpf.ViewModels;
 
 namespace ConfigAdmin.Wpf.Views;
 
-public partial class BaseEditView : System.Windows.Controls.UserControl
+public partial class BaseEditView
 {
     public BaseEditView()
     {
         InitializeComponent();
+        DataContextChanged += OnDataContextChanged;
     }
 
-    private void OnPasswordChanged(object sender, RoutedEventArgs e)
+    public void ResetPasswordField() => PasswordBox.Password = string.Empty;
+
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (DataContext is BaseEditViewModel vm)
-            vm.Password = PasswordBox.Password;
+        if (e.NewValue is BaseEditViewModel vm && string.IsNullOrEmpty(vm.Password))
+            ResetPasswordField();
     }
 }

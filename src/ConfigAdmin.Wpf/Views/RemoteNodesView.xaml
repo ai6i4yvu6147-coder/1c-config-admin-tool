@@ -8,8 +8,7 @@
                 <Button Content="Добавить" Command="{Binding AddCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="Редактировать" Command="{Binding EditCommand}" Margin="0,0,8,0" Padding="10,4" />
                 <Button Content="Копировать Node ID" Command="{Binding CopyNodeIdCommand}" Margin="0,0,8,0" Padding="10,4" />
-                <Button Content="Обновить" Command="{Binding RefreshCommand}" Margin="0,0,8,0" Padding="10,4" />
-                <Button Content="Назад" Command="{Binding BackCommand}" Padding="10,4" />
+                <Button Content="Обновить" Command="{Binding RefreshCommand}" Padding="10,4" />
             </StackPanel>
             <TextBlock Text="{Binding ReceiverStatus}" Foreground="Gray" Margin="0,0,0,4" />
             <TextBlock Text="{Binding StatusMessage}" Foreground="Firebrick" TextWrapping="Wrap" />

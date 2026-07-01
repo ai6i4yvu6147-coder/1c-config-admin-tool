@@ -64,11 +64,9 @@ public sealed class BaseEditViewModel : ObservableObject
         SaveCommand = new RelayCommand(SaveAsync);
         TestConnectionCommand = new RelayCommand(TestConnectionAsync);
         BrowsePlatformCommand = new RelayCommand(BrowsePlatform);
-        BackCommand = new RelayCommand(() => _navigationService.GoBack());
         AddTemplateInstanceCommand = new RelayCommand(AddTemplateInstance);
         AddLocalInstanceCommand = new RelayCommand(AddLocalInstance);
         RemoveInstanceCommand = new RelayCommand(RemoveSelectedInstance, () => SelectedInstance is { IsBase: false });
-        _ = LoadClientsAsync();
     }
 
     public ObservableCollection<string> Clients { get; }
@@ -101,7 +99,7 @@ public sealed class BaseEditViewModel : ObservableObject
         {
             SetProperty(ref _selectedClient, value);
             if (!_suppressClientChange)
-                _ = LoadRemoteNodesForClientAsync();
+                _ = LoadRemoteNodesForClientAsync(_beginSequence);
         }
     }
 
@@ -111,7 +109,7 @@ public sealed class BaseEditViewModel : ObservableObject
         set
         {
             SetProperty(ref _name, value);
-            UpdateLocalTargetHint();
+            _ = UpdateLocalTargetHintAsync(_beginSequence);
         }
     }
 
@@ -190,42 +188,50 @@ public sealed class BaseEditViewModel : ObservableObject
     public RelayCommand SaveCommand { get; }
     public RelayCommand TestConnectionCommand { get; }
     public RelayCommand BrowsePlatformCommand { get; }
-    public RelayCommand BackCommand { get; }
     public RelayCommand AddTemplateInstanceCommand { get; }
     public RelayCommand AddLocalInstanceCommand { get; }
     public RelayCommand RemoveInstanceCommand { get; }
 
-    public async void BeginCreate()
+    public async Task<bool> PrepareCreateAsync()
     {
         var seq = Interlocked.Increment(ref _beginSequence);
+        _suppressClientChange = true;
         try
         {
             _editingId = null;
             ResetFields();
-            await LoadClientsAsync();
+            await LoadClientsAsync(seq);
             if (seq != _beginSequence)
-                return;
+                return false;
 
-            await LoadTemplatesAsync();
+            await LoadTemplatesAsync(seq);
             if (seq != _beginSequence)
-                return;
+                return false;
 
+            SelectedInstance = null;
             Instances.Clear();
 
             if (Clients.Count == 0)
                 StatusMessage = "Сначала добавьте клиента (кнопка «Добавить клиента» на главном экране).";
 
             RaisePropertyChanged(nameof(Title));
+            return true;
         }
         catch (Exception ex)
         {
             StatusMessage = ex.Message;
+            return false;
+        }
+        finally
+        {
+            _suppressClientChange = false;
         }
     }
 
-    public async void BeginEdit(Guid id)
+    public async Task<bool> PrepareEditAsync(Guid id)
     {
         var seq = Interlocked.Increment(ref _beginSequence);
+        _suppressClientChange = true;
         try
         {
             _editingId = id;
@@ -233,23 +239,21 @@ public sealed class BaseEditViewModel : ObservableObject
             if (profile is null)
             {
                 StatusMessage = "База не найдена.";
-                return;
+                return false;
             }
 
             if (seq != _beginSequence)
-                return;
+                return false;
 
-            await LoadClientsAsync();
-            await LoadTemplatesAsync();
+            await LoadClientsAsync(seq);
+            await LoadTemplatesAsync(seq);
             if (seq != _beginSequence)
-                return;
+                return false;
 
             var clients = await _profileService.GetClientsAsync();
             var client = clients.FirstOrDefault(c => c.Id == profile.ClientId);
 
-            _suppressClientChange = true;
             SelectedClient = client?.Name ?? string.Empty;
-            _suppressClientChange = false;
 
             Name = profile.Name;
             PlatformPath = profile.PlatformPath;
@@ -258,27 +262,44 @@ public sealed class BaseEditViewModel : ObservableObject
             Username = profile.Username ?? string.Empty;
             Password = string.Empty;
             IsLocalExport = profile.ExportLocation == ExportLocation.Local;
-            SelectedRemoteNodeId = profile.RemoteNodeId;
             RemoteExportPath = profile.RemoteExportPath ?? string.Empty;
-            await LoadRemoteNodesForClientAsync();
+            await LoadRemoteNodesForClientAsync(seq, profile.RemoteNodeId);
             if (seq != _beginSequence)
-                return;
+                return false;
 
-            await LoadInstancesAsync(id);
-            UpdateLocalTargetHint();
+            await LoadInstancesAsync(id, seq);
+            if (seq != _beginSequence)
+                return false;
+
+            if (client is not null)
+            {
+                LocalTargetHint = _exportPathBuilder.GetConfigurationPath(
+                    client.ExportRootPath, client.Name, profile.Name);
+            }
+
             StatusMessage = string.Empty;
             RaisePropertyChanged(nameof(Title));
+            return true;
         }
         catch (Exception ex)
         {
             StatusMessage = ex.Message;
+            return false;
+        }
+        finally
+        {
+            _suppressClientChange = false;
         }
     }
 
-    private async Task LoadInstancesAsync(Guid infobaseId)
+    private async Task LoadInstancesAsync(Guid infobaseId, int seq)
     {
-        Instances.Clear();
         var instances = await _configurationService.GetInstancesAsync(infobaseId);
+        if (seq != _beginSequence)
+            return;
+
+        SelectedInstance = null;
+        Instances.Clear();
         foreach (var instance in instances)
         {
             Instances.Add(new InstanceEditItem
@@ -293,10 +314,15 @@ public sealed class BaseEditViewModel : ObservableObject
         }
     }
 
-    private async Task LoadTemplatesAsync()
+    private async Task LoadTemplatesAsync(int seq)
     {
+        var templates = await _catalogService.GetTemplatesAsync();
+        if (seq != _beginSequence)
+            return;
+
+        SelectedTemplateToAdd = null;
         AvailableTemplates.Clear();
-        foreach (var template in await _catalogService.GetTemplatesAsync())
+        foreach (var template in templates)
         {
             if (template.Kind == ConfigurationKind.Base)
                 continue;
@@ -314,44 +340,92 @@ public sealed class BaseEditViewModel : ObservableObject
         SelectedTemplateToAdd = AvailableTemplates.FirstOrDefault()?.Id;
     }
 
-    private async Task LoadClientsAsync()
+    private async Task LoadClientsAsync(int seq)
     {
-        Clients.Clear();
-        foreach (var client in await _profileService.GetClientsAsync())
-            Clients.Add(client.Name);
+        var clients = await _profileService.GetClientsAsync();
+        if (seq != _beginSequence)
+            return;
 
-        if (Clients.Count > 0 && string.IsNullOrWhiteSpace(SelectedClient))
-            SelectedClient = Clients[0];
+        var manageSuppress = !_suppressClientChange;
+        if (manageSuppress)
+            _suppressClientChange = true;
+        try
+        {
+            SelectedClient = string.Empty;
+            Clients.Clear();
+            foreach (var client in clients)
+                Clients.Add(client.Name);
+
+            if (Clients.Count > 0 && string.IsNullOrWhiteSpace(SelectedClient))
+                SelectedClient = Clients[0];
+        }
+        finally
+        {
+            if (manageSuppress)
+                _suppressClientChange = false;
+        }
     }
 
-    private async Task LoadRemoteNodesForClientAsync()
+    private async Task LoadRemoteNodesForClientAsync(int seq, Guid? restoreNodeId = null)
     {
-        RemoteNodes.Clear();
         var clients = await _profileService.GetClientsAsync();
         var client = clients.FirstOrDefault(c => c.Name == SelectedClient);
         if (client is null)
-            return;
-
-        var nodes = await _remoteNodeService.GetAllAsync();
-        foreach (var node in nodes.Where(n => n.ClientId == client.Id && n.Enabled))
-            RemoteNodes.Add(new RemoteNodeOption(node.Id, node.Name));
-
-        if (SelectedRemoteNodeId is null && RemoteNodes.Count > 0)
-            SelectedRemoteNodeId = RemoteNodes[0].Id;
-    }
-
-    private async void UpdateLocalTargetHint()
-    {
-        var clients = await _profileService.GetClientsAsync();
-        var client = clients.FirstOrDefault(c => c.Name == SelectedClient);
-        if (client is null || string.IsNullOrWhiteSpace(Name))
         {
-            LocalTargetHint = string.Empty;
+            if (seq != _beginSequence)
+                return;
+
+            SelectedRemoteNodeId = null;
+            RemoteNodes.Clear();
             return;
         }
 
-        LocalTargetHint = _exportPathBuilder.GetConfigurationPath(
-            client.ExportRootPath, client.Name, Name);
+        var nodes = await _remoteNodeService.GetAllAsync();
+        if (seq != _beginSequence)
+            return;
+
+        SelectedRemoteNodeId = null;
+        RemoteNodes.Clear();
+        foreach (var node in nodes.Where(n => n.ClientId == client.Id && n.Enabled))
+            RemoteNodes.Add(new RemoteNodeOption(node.Id, node.Name));
+
+        if (restoreNodeId is Guid nodeId && RemoteNodes.Any(n => n.Id == nodeId))
+            SelectedRemoteNodeId = nodeId;
+        else if (RemoteNodes.Count > 0)
+            SelectedRemoteNodeId = RemoteNodes[0].Id;
+    }
+
+    private async Task UpdateLocalTargetHintAsync(int seq)
+    {
+        try
+        {
+            if (seq != _beginSequence)
+                return;
+
+            if (string.IsNullOrWhiteSpace(SelectedClient) || string.IsNullOrWhiteSpace(Name))
+            {
+                LocalTargetHint = string.Empty;
+                return;
+            }
+
+            var clients = await _profileService.GetClientsAsync();
+            if (seq != _beginSequence)
+                return;
+
+            var client = clients.FirstOrDefault(c => c.Name == SelectedClient);
+            if (client is null || string.IsNullOrWhiteSpace(Name))
+            {
+                LocalTargetHint = string.Empty;
+                return;
+            }
+
+            LocalTargetHint = _exportPathBuilder.GetConfigurationPath(
+                client.ExportRootPath, client.Name, Name);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = ex.Message;
+        }
     }
 
     private void ResetFields()
@@ -363,10 +437,15 @@ public sealed class BaseEditViewModel : ObservableObject
         Username = string.Empty;
         Password = string.Empty;
         IsLocalExport = true;
-        SelectedRemoteNodeId = null;
         RemoteExportPath = string.Empty;
         LocalTargetHint = string.Empty;
         StatusMessage = string.Empty;
+        SelectedTemplateToAdd = null;
+        SelectedInstance = null;
+        SelectedRemoteNodeId = null;
+        _suppressClientChange = true;
+        SelectedClient = string.Empty;
+        _suppressClientChange = false;
         Instances.Clear();
     }
 
@@ -485,7 +564,7 @@ public sealed class BaseEditViewModel : ObservableObject
                 infobaseId: _editingId);
 
             if (Instances.Count == 0)
-                await LoadInstancesAsync(profile.Id);
+                await LoadInstancesAsync(profile.Id, _beginSequence);
 
             if (!ValidateInstances())
             {
@@ -537,19 +616,15 @@ public sealed class BaseEditViewModel : ObservableObject
                 return;
             }
 
-            var profile = await _profileService.AddOrUpdateInfobaseAsync(
-                SelectedClient,
-                Name,
+            var result = await _connectionTestService.TestDraftAsync(
                 PlatformPath,
                 IsServerConnection ? ConnectionType.Server : ConnectionType.File,
                 ConnectionString,
                 Username,
-                string.IsNullOrWhiteSpace(Password) ? null : Password,
-                infobaseId: _editingId);
+                string.IsNullOrWhiteSpace(Password) ? null : Password);
 
-            var result = await _connectionTestService.TestAsync(profile);
             StatusMessage = result.Success
-                ? "Подключение успешно."
+                ? "Подключение успешно. Сохраните базу, чтобы применить изменения."
                 : $"Ошибка подключения (код {result.ExitCode}): {result.StandardError}";
         }
         catch (Exception ex)

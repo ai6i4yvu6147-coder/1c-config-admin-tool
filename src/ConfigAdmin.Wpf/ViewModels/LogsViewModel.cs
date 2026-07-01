@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Windows.Input;
 using ConfigAdmin.Application.Services;
 using ConfigAdmin.Infrastructure;
 using ConfigAdmin.Wpf.Services;
@@ -33,7 +34,6 @@ public sealed class LogsViewModel : ObservableObject, IRefreshOnNavigate
         Steps = new ObservableCollection<ExportRunMetaStep>();
         AppEvents = _activityLog.Entries;
 
-        BackCommand = new RelayCommand(() => _navigationService.GoBack());
         RefreshCommand = new RelayCommand(RefreshAsync);
         OpenOutputFolderCommand = new RelayCommand(OpenOutputFolder, () => SelectedRun?.OutputPath is not null);
         OpenRunArtifactsCommand = new RelayCommand(OpenRunArtifacts, () => SelectedRun?.RunArtifactsDirectory is not null);
@@ -85,6 +85,7 @@ public sealed class LogsViewModel : ObservableObject, IRefreshOnNavigate
 
             _selectedRun = value;
             RaisePropertyChanged();
+            CommandManager.InvalidateRequerySuggested();
             _ = LoadSelectedRunDetailsAsync();
         }
     }
@@ -100,6 +101,7 @@ public sealed class LogsViewModel : ObservableObject, IRefreshOnNavigate
             _selectedStep = value;
             RaisePropertyChanged();
             UpdateStepDetailText();
+            CommandManager.InvalidateRequerySuggested();
         }
     }
 
@@ -115,7 +117,6 @@ public sealed class LogsViewModel : ObservableObject, IRefreshOnNavigate
         set => SetProperty(ref _stepDetailText, value);
     }
 
-    public RelayCommand BackCommand { get; }
     public RelayCommand RefreshCommand { get; }
     public RelayCommand OpenOutputFolderCommand { get; }
     public RelayCommand OpenRunArtifactsCommand { get; }

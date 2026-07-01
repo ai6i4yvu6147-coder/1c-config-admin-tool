@@ -33,3 +33,11 @@ logs/
 ## OS
 Thumbs.db
 Desktop.ini
+
+## WI normalize (S/H base)
+plans/
+scratch/
+
+## Group sync transport (ephemeral)
+docs/group/inbox/
+docs/group/outbox/

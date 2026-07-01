@@ -8,13 +8,6 @@
                    Foreground="Gray"
                    Margin="0,0,0,20" />
 
-        <TextBlock Text="URL приёмника Hub (только для режима Админка)" />
-        <TextBox Text="{Binding HubListenUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,12" />
-        <TextBlock Text="На RDP укажите этот URL с Tailscale-IP вместо 0.0.0.0. Порт 443 — если клиент блокирует нестандартные порты."
-                   TextWrapping="Wrap"
-                   Foreground="Gray"
-                   Margin="0,0,0,16" />
-
         <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
             <Button Content="Админка (Hub)"
                     Command="{Binding SelectHubCommand}"

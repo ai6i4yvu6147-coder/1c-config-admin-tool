@@ -11,7 +11,7 @@ using ConfigAdmin.Wpf.Services;
 
 namespace ConfigAdmin.Wpf.ViewModels;
 
-public sealed class ConfigMcpViewModel : ObservableObject, IRefreshOnNavigate
+public sealed class ConfigMcpViewModel : BusyViewModelBase, IRefreshOnNavigate
 {
     private readonly ConfigMcpSyncService _syncService;
     private readonly ProfileService _profileService;
@@ -23,10 +23,9 @@ public sealed class ConfigMcpViewModel : ObservableObject, IRefreshOnNavigate
     private string _rootPath = string.Empty;
     private string _statusSummary = string.Empty;
     private string _mcpReadiness = string.Empty;
-    private string _statusMessage = string.Empty;
     private string _followUpText = string.Empty;
     private string _registryFilePath = string.Empty;
-    private bool _isBusy;
+    private bool _initialized;
     private ConfigMcpInstanceLinkItem? _selectedInstance;
     private McpProjectOption? _selectedMcpProject;
     private McpDatabaseOption? _selectedMcpDatabase;
@@ -57,7 +56,6 @@ public sealed class ConfigMcpViewModel : ObservableObject, IRefreshOnNavigate
         SyncSelectedCommand = new RelayCommand(SyncSelectedAsync, () => SelectedInstance?.IsLinked == true && !IsBusy);
         SyncAllCommand = new RelayCommand(SyncAllAsync, () => ConfigInstances.Any(b => b.IsLinked) && !IsBusy);
         OpenJournalCommand = new RelayCommand(OpenJournal);
-        BackCommand = new RelayCommand(() => _navigationService.GoBack());
     }
 
     public ObservableCollection<ConfigMcpInstanceLinkItem> ConfigInstances { get; }
@@ -82,12 +80,6 @@ public sealed class ConfigMcpViewModel : ObservableObject, IRefreshOnNavigate
         set => SetProperty(ref _mcpReadiness, value);
     }
 
-    public string StatusMessage
-    {
-        get => _statusMessage;
-        set => SetProperty(ref _statusMessage, value);
-    }
-
     public string FollowUpText
     {
         get => _followUpText;
@@ -98,16 +90,6 @@ public sealed class ConfigMcpViewModel : ObservableObject, IRefreshOnNavigate
     {
         get => _registryFilePath;
         set => SetProperty(ref _registryFilePath, value);
-    }
-
-    public bool IsBusy
-    {
-        get => _isBusy;
-        set
-        {
-            SetProperty(ref _isBusy, value);
-            CommandManager.InvalidateRequerySuggested();
-        }
     }
 
     public ConfigMcpInstanceLinkItem? SelectedInstance
@@ -170,15 +152,17 @@ public sealed class ConfigMcpViewModel : ObservableObject, IRefreshOnNavigate
     public RelayCommand SyncSelectedCommand { get; }
     public RelayCommand SyncAllCommand { get; }
     public RelayCommand OpenJournalCommand { get; }
-    public RelayCommand BackCommand { get; }
 
-    public Task RefreshOnNavigateAsync() => RefreshAsync();
-
-    public async Task InitializeAsync()
+    public async Task RefreshOnNavigateAsync()
     {
-        var tool = await _syncService.EnsureConfigMcpToolAsync();
-        RootPath = tool.RootPath;
-        RegistryFilePath = ManagedToolRegistryService.ResolveProjectsJsonPath(tool.RootPath);
+        if (!_initialized)
+        {
+            var tool = await _syncService.EnsureConfigMcpToolAsync();
+            RootPath = tool.RootPath;
+            RegistryFilePath = ManagedToolRegistryService.ResolveProjectsJsonPath(tool.RootPath);
+            _initialized = true;
+        }
+
         await RefreshAsync();
     }
 
@@ -276,7 +260,15 @@ public sealed class ConfigMcpViewModel : ObservableObject, IRefreshOnNavigate
         if (projectInMcp is not null)
             SelectedMcpProject = projectInMcp;
         else
-            SelectedMcpProject = McpProjects.FirstOrDefault(p => p.IsCreateNew) ?? McpProjects.FirstOrDefault();
+        {
+            var matchingByClient = McpProjects.FirstOrDefault(p =>
+                !p.IsCreateNew &&
+                string.Equals(p.Name, item.ClientName, StringComparison.OrdinalIgnoreCase));
+
+            SelectedMcpProject = matchingByClient
+                ?? McpProjects.FirstOrDefault(p => p.IsCreateNew)
+                ?? McpProjects.FirstOrDefault();
+        }
 
         ReloadMcpDatabases(preserveDatabaseSelection: false);
 
@@ -411,6 +403,12 @@ public sealed class ConfigMcpViewModel : ObservableObject, IRefreshOnNavigate
         try
         {
             var selection = BuildLinkSelection();
+            _activityLog.LogInfo(
+                "MCP",
+                "Привязка instance",
+                $"project={SelectedMcpProject?.Name}, database={SelectedMcpDatabase?.Name}, " +
+                $"defaultProject={SelectedInstance.DefaultNewProjectName}");
+
             var syncResult = await _syncService.LinkAndSyncInstanceAsync(
                 SelectedInstance.InstanceId,
                 selection,

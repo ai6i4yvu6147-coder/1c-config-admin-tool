@@ -70,9 +70,10 @@
 **Сейчас:** E2E работает, но GUI перегружен и неочевиден; upload ~800 MB занимает 30+ мин через Funnel.
 
 - Упростить экраны Hub (Remote-база, tunnel, статус job) и Передатчик (pairing + прогресс на одном экране).
+  - **частично (2026-07-01):** `HubSettingsView` (listen URL отдельно от Tailscale URL для RDP); shell «← Назад (Esc)» вместо дублирующих кнопок на дочерних экранах; общие стили; batch refresh списка баз.
 - R2.6: оптимизация скорости — chunk size, direct Tailscale, параллельные chunks.
 - R2.10: **расчёт и отображение примерной скорости загрузки на Hub** — MB/s (скользящее среднее по отправленным chunks), ETA по `uploaded/total`; UI Передатчика и карточка job на Hub.
-- R2.7: cleanup на RDP — **две кнопки** на Передатчике (B4): job-каталоги; полная очистка `%AppData%\ConfigAdmin\` на машине агента.
+- R2.7: cleanup на RDP — **две кнопки** на Передатчике (B4) — **готово** (2026-06-30): `AgentDataCleanupService`, `SyncAgentView`.
 - **Полный MCP-цикл (H6 / R2.9):** **готово** (2026-06-30) — Hub orchestration `rebuild-index` после export / sync. См. [`admin-hub/integration.md`](admin-hub/integration.md) § Reference workflow.
 
 Детали: [`remote-sync/implementation-plan.md`](remote-sync/implementation-plan.md) R2.6–R2.10, [`remote-sync/status.md`](remote-sync/status.md).
@@ -92,15 +93,15 @@
 - Сброс профиля (очистка `%AppData%\ConfigAdmin\`).
 - Предупреждение: XML на диске не удаляются.
 
-### 3. План выгрузки на экране «Выгрузка» (B3)
+### 3. План выгрузки на экране «Выгрузка» (B3) — **выполнено (2026-06-30)**
 
-**Сейчас:** план read-only; `ExportEnabled` редактируется только в карточке базы (`BaseEditView`).
+**Было:** план read-only; `ExportEnabled` только в карточке базы.
 
-**Решение (2026-06-30):** чекбоксы на `ExportView` — **только на один запуск**; `configuration_instances.export_enabled` в SQLite **не менять**. Override в `ExportViewModel` при построении плана / перед export.
+**Сделано:** чекбоксы «Выгрузить» в гриде `ExportView` — **только на один запуск**; `configuration_instances.export_enabled` в SQLite **не меняется**. Session override в `ExportViewModel` → `ExportOrchestrator` и `RemoteSyncOrchestrator.RequestSyncAsync(planOverride)`.
 
-- [ ] Чекбоксы в гриде плана на экране Выгрузка
-- [ ] Фильтрация export plan / remote jobs по session-override
-- [ ] Подсказка в UI: «изменения не сохраняются в настройках базы»
+- [x] Чекбоксы в гриде плана на экране Выгрузка
+- [x] Фильтрация export plan / remote jobs по session-override
+- [x] Подсказка в UI: изменения не сохраняются в настройках базы
 
 ### 4. Дерево клиентов/баз
 
@@ -143,25 +144,43 @@ Serilog, `runs/`, meta JSON, экран логов в WPF, `/Out` и `/DumpResul
 
 ---
 
-## Известные баги и UX-дыры (открыто, 2026-06-30)
+## Известные баги и UX-дыры
 
-| ID | Симптом | Контекст / решение | Приоритет |
-|----|---------|-------------------|-----------|
-| **B1** | Мусорные проекты «Р» / «P» в `projects.json` | Создаёт Hub (подтверждено); сценарий пока не воспроизведён — **отладка** (`LinkAndSyncInstanceAsync`, выбор project/database в UI, лог apply/merge). Валидация ≥ 3 символа не закрыла все пути | P1 |
-| **B2** | Hub **вылетает** без сообщений | **Стабильно:** одна и та же ИБ → настройки → назад → снова настройки. `BaseEditViewModel` singleton + `async void BeginEdit`. **Отладка** под дебаггером (стек не в UI / Serilog) | P0 |
-| **B3** | План выгрузки read-only на экране «Выгрузка» | Чекбоксы **только на один запуск** (не писать в SQLite). См. §3 выше | P1 |
-| **B4** | Артефакты sync на RDP после job | Две кнопки на Передатчике (см. ниже); `TryCleanupWorkDir` — только текущий job | P1 |
+*Обновлено: 2026-07-01 (B2, B3, B4 закрыты; B1 — частичная защита; WPF UI review — 2026-07-01).*
 
-### B2 — crash карточки базы
+### Закрыто (2026-06-30)
 
-**Воспроизведение:** главный экран → настройки инфобазы → назад → снова те же настройки той же ИБ → процесс падает, диалогов нет.
+| ID | Симптом | Решение |
+|----|---------|---------|
+| **B2** | Hub **вылетает** при повторном открытии карточки базы | **исправлено:** singleton `BaseEditViewModel` + detached WPF-привязки при `Clients.Clear()`. `PrepareEditAsync`/`PrepareCreateAsync` до навигации; `_suppressClientChange` на время prepare; переиспользование `BaseEditView` + `DataContext = null` при уходе (`NavigationService`); `DispatcherUnhandledException` в `App.xaml.cs`. |
+| **B3** | План выгрузки read-only на экране «Выгрузка» | **исправлено:** см. §3 выше. |
+| **B4** | Артефакты sync на RDP после job | **исправлено:** две кнопки на Передатчике; `AgentDataCleanupService`; подтверждение; активный job не трогается. |
 
-**План отладки:**
-- breakpoint в `BaseEditViewModel.BeginEdit` / `BeginNew` / `LoadInstancesAsync`;
-- проверить гонку `_beginSequence` vs повторная навигация (`NavigationService` создаёт новый `BaseEditView` на тот же singleton VM);
-- логировать необработанные исключения в `App.xaml.cs` (`DispatcherUnhandledException`).
+### WPF UI review — закрыто (2026-07-01)
 
-### B4 — очистка на Передатчике (R2.7)
+| Тема | Решение |
+|------|---------|
+| Vault lock — stale master password | `VaultViewModel.ResetForLock()` перед `SetRoot<VaultViewModel>` |
+| Переименование клиента → дубликат | `ProfileService.AddOrUpdateClientAsync(..., clientId)` |
+| Test connection сбрасывает export-настройки | `ConnectionTestService.TestDraftAsync` — без persist до Save |
+| `ExportViewModel.Begin` async void | `BeginAsync` + await в `MainViewModel` |
+| ConfigMcp двойной refresh | `_initialized` в `RefreshOnNavigateAsync`; убран `OnLoaded` |
+| Zombie ConfigAdmin.exe после закрытия | graceful shutdown + `Environment.Exit` только по timeout |
+| N+1 при refresh списка баз | `GetExportSummariesForAllBasesAsync()` |
+
+Код: `NavigationService`, `PasswordBoxBindingBehavior`, `BusyViewModelBase`, `HubSettingsView`, `App.xaml.cs`.
+
+### Открыто
+
+| ID | Симптом | Контекст | Приоритет |
+|----|---------|----------|-----------|
+| **B1** | Мусорные проекты «Р» / «P» в `projects.json` | Частичная защита 2026-06-30 (лог, дубликат, default UI). UI удаления — открыто (§7) | P1 |
+
+### B2 — crash карточки базы (архив)
+
+**Root cause:** отсоединённый `BaseEditView` сохранял привязки к singleton VM; `Clients.Clear()` в `PrepareEdit` сбрасывал `SelectedClient` через ComboBox → гонка `LoadRemoteNodesForClientAsync`.
+
+### B4 — очистка на Передатчике (R2.7, закрыто)
 
 **Две кнопки** (подтверждение + итог в лог Передатчика):
 
@@ -170,16 +189,16 @@ Serilog, `runs/`, meta JSON, экран логов в WPF, `/Out` и `/DumpResul
 | **Очистить job-каталоги** | `%AppData%\ConfigAdmin\agent\work\` (все `{jobId}\`), опционально `agent\resume\` | активный job (export/upload в процессе) |
 | **Полная очистка следов ПО** | весь `%AppData%\ConfigAdmin\` на этой машине: `agent\` (work, resume, `settings.json`), `logs\`, локальный `configadmin.db` если есть | Hub `ExportRoot` на ПК Hub; на RDP обычно нет выгрузок Hub |
 
-Вторая кнопка — сброс Передатчика «как не ставили»: отключение от Hub, пустые поля UI после очистки.
+Код: `AgentDataCleanupService`, `SyncAgentViewModel`, `AgentSettingsStore`; per-job — `SyncAgentJobProcessor.TryCleanupWorkDir`.
 
 Опционально позже: автоматический cleanup после успеха (настройка R2.7).
 
-Код: `SyncAgentJobProcessor.TryCleanupWorkDir`, `AgentSettingsStore`, `AgentResumeStore`, `AgentWorkDirectoryResolver`.
-
 ### B1 — мусорные MCP-проекты (дополнительно к §7)
 
-- [ ] Отладка: логировать `ConfigMcpLinkMode`, `defaultProjectName`, selection project/database при «Привязать»
-- [ ] Запретить «Создать новый проект», если в MCP уже есть проект с тем же `clientId` / именем клиента
+- [x] Лог привязки: `ConfigMcpSyncService.LinkAndSyncInstanceAsync`, журнал UI в `ConfigMcpViewModel` (2026-06-30)
+- [x] Запрет дубликата проекта по имени клиента в `projects.json` (2026-06-30)
+- [x] Default: не «Создать проект», если в MCP уже есть проект с именем клиента (2026-06-30)
+- [x] Подсказка в UI: ручная очистка / reconcile CLI (2026-06-30)
 - [ ] UI удаления project/database в portable или reconcile через CLI
 - [ ] Ручная очистка существующих «Р» / «P» в `projects.json` или Admin GUI config-mcp
 
@@ -197,13 +216,15 @@ Serilog, `runs/`, meta JSON, экран логов в WPF, `/Out` и `/DumpResul
 
 | P | Задача |
 |---|--------|
-| P0 | **B2:** crash при повторном открытии карточки базы |
+| P0 | **B2:** crash при повторном открытии карточки базы — **done** (2026-06-30) |
 | P0 | ConfigAdmin protocol CLI (Phase 1) |
 | P0 | config-mcp integration (Phase 1) — **done** |
-| P1 | **B1** мусорные MCP-проекты «Р» / **B3** план на экране Выгрузка / **B4** очистка work dirs на Передатчике |
+| P1 | **B1** мусорные MCP-проекты «Р» — **частично** (2026-06-30) |
+| P1 | **B3** план на экране Выгрузка — **done** (2026-06-30) |
+| P1 | **B4** очистка work dirs на Передатчике — **done** (2026-06-30) |
 | P1 | **ConfigurationTemplate / Instance** (export plan, Remote extensions) |
 | P1 | **H6** — **done** (2026-06-30) |
-| P1 | Remote Sync R2: UX/GUI + скорость upload |
+| P1 | Remote Sync R2: UX/GUI + скорость upload — **частично** (Hub settings, shell nav, 2026-07-01) |
 | P1 | Дерево клиентов/баз + редактирование клиента |
 | P1 | Удаление и сброс |
 | P2 | Выгрузить все базы (GUI) |
@@ -211,5 +232,5 @@ Serilog, `runs/`, meta JSON, экран логов в WPF, `/Out` и `/DumpResul
 | P3 | XML vs архив, автообнаружение расширений |
 | P3 | help/data MCP links (Phase 3) |
 
-*Обновлено: 2026-06-30*
+*Обновлено: 2026-07-01*
 

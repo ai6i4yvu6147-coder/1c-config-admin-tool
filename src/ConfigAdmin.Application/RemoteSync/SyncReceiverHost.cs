@@ -62,10 +62,32 @@ public sealed class SyncReceiverHost : IAsyncDisposable
         if (_app is null)
             return;
 
-        await _app.StopAsync(ct);
-        await _app.DisposeAsync();
+        var app = _app;
         _app = null;
-        _logger.LogInformation("Sync receiver stopped.");
+
+        try
+        {
+            using var stopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            stopCts.CancelAfter(TimeSpan.FromSeconds(5));
+            await app.StopAsync(stopCts.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Sync receiver stop interrupted");
+        }
+        finally
+        {
+            try
+            {
+                await app.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Sync receiver dispose failed");
+            }
+
+            _logger.LogInformation("Sync receiver stopped.");
+        }
     }
 
     public async ValueTask DisposeAsync() => await StopAsync();

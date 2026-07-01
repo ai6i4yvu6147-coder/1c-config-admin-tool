@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Windows;
 using System.Windows.Input;
 using ConfigAdmin.Application.RemoteSync;
 using ConfigAdmin.Wpf.Services;
@@ -13,6 +14,8 @@ public sealed class SyncAgentViewModel : ObservableObject
 
     private readonly SyncAgentConnectionService _connectionService;
     private readonly AgentSettingsStore _agentSettingsStore;
+    private readonly AgentDataCleanupService _cleanupService;
+    private readonly AppModeService _appModeService;
     private string _hubUrl = string.Empty;
     private string _nodeId = string.Empty;
     private string _pairingPassword = string.Empty;
@@ -26,10 +29,14 @@ public sealed class SyncAgentViewModel : ObservableObject
 
     public SyncAgentViewModel(
         SyncAgentConnectionService connectionService,
-        AgentSettingsStore agentSettingsStore)
+        AgentSettingsStore agentSettingsStore,
+        AgentDataCleanupService cleanupService,
+        AppModeService appModeService)
     {
         _connectionService = connectionService;
         _agentSettingsStore = agentSettingsStore;
+        _cleanupService = cleanupService;
+        _appModeService = appModeService;
 
         LogLines = new ObservableCollection<string>();
 
@@ -41,6 +48,9 @@ public sealed class SyncAgentViewModel : ObservableObject
         DisconnectCommand = new RelayCommand(DisconnectAsync, () => IsConnected && !IsBusy);
         CopyLogCommand = new RelayCommand(CopyLog, () => LogLines.Count > 0);
         CopyStatusCommand = new RelayCommand(CopyStatus, () => !string.IsNullOrWhiteSpace(StatusMessage));
+        CleanupJobDirsCommand = new RelayCommand(CleanupJobDirsAsync, CanCleanup);
+        CleanupAllAgentDataCommand = new RelayCommand(CleanupAllAgentDataAsync, CanCleanup);
+        ResetModeCommand = new RelayCommand(ResetModeAsync, () => !IsBusy);
 
         LoadSettings();
     }
@@ -125,6 +135,9 @@ public sealed class SyncAgentViewModel : ObservableObject
     public RelayCommand DisconnectCommand { get; }
     public RelayCommand CopyLogCommand { get; }
     public RelayCommand CopyStatusCommand { get; }
+    public RelayCommand CleanupJobDirsCommand { get; }
+    public RelayCommand CleanupAllAgentDataCommand { get; }
+    public RelayCommand ResetModeCommand { get; }
 
     private void LoadSettings()
     {
@@ -226,6 +239,7 @@ public sealed class SyncAgentViewModel : ObservableObject
         {
             CurrentProgress = progress ?? string.Empty;
             IsProcessingJob = !string.IsNullOrWhiteSpace(progress);
+            CommandManager.InvalidateRequerySuggested();
         });
     }
 
@@ -239,6 +253,102 @@ public sealed class SyncAgentViewModel : ObservableObject
     }
 
     private void AddLog(string line) => OnLogLineAdded(line);
+
+    private bool CanCleanup() => !IsProcessingJob && !IsBusy;
+
+    private async Task ResetModeAsync()
+    {
+        try
+        {
+            IsBusy = true;
+            await _appModeService.ResetModeAsync();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async Task CleanupJobDirsAsync()
+    {
+        var confirm = System.Windows.MessageBox.Show(
+            "Удалить все каталоги задач в agent\\work\\? Активная задача (если есть) не будет затронута.",
+            "Очистка job-каталогов",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.Yes)
+            return;
+
+        try
+        {
+            var result = _cleanupService.CleanupJobDirectories(_connectionService.ActiveJobId, includeResume: true);
+            var message = $"Удалено: {result.Deleted.Count}";
+            if (result.Skipped.Count > 0)
+                message += $", пропущено (активный job): {result.Skipped.Count}";
+
+            StatusMessage = string.Empty;
+            AddLog(message);
+            foreach (var path in result.Deleted)
+                AddLog($"  удалено: {path}");
+            foreach (var path in result.Skipped)
+                AddLog($"  пропущено: {path}");
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = ex.Message;
+            AddLog($"Очистка job-каталогов: {ex.Message}");
+        }
+
+        await Task.CompletedTask;
+    }
+
+    private async Task CleanupAllAgentDataAsync()
+    {
+        if (IsConnected)
+        {
+            var warn = System.Windows.MessageBox.Show(
+                "Перед полной очисткой будет выполнено отключение от Hub.",
+                "Полная очистка",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Information);
+            if (warn != MessageBoxResult.OK)
+                return;
+
+            await DisconnectAsync();
+        }
+
+        var confirm = System.Windows.MessageBox.Show(
+            "Удалить все следы ConfigAdmin на этой машине (%AppData%\\ConfigAdmin\\: agent, logs, configadmin.db)? " +
+            "Каталоги выгрузки Hub на этом ПК не затрагиваются.",
+            "Полная очистка следов ПО",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.Yes)
+            return;
+
+        try
+        {
+            var result = _cleanupService.CleanupAllAgentData();
+            _agentSettingsStore.Clear();
+
+            HubUrl = string.Empty;
+            NodeId = string.Empty;
+            PairingPassword = string.Empty;
+            StatusMessage = string.Empty;
+            CurrentProgress = string.Empty;
+            LastHeartbeatText = "—";
+            StatusText = "Отключено";
+
+            AddLog($"Полная очистка: удалено {result.Deleted.Count} объектов");
+            foreach (var path in result.Deleted)
+                AddLog($"  удалено: {path}");
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = ex.Message;
+            AddLog($"Полная очистка: {ex.Message}");
+        }
+    }
 
     private void CopyLog()
     {

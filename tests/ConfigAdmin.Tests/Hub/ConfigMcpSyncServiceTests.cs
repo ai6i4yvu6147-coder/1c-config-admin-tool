@@ -324,7 +324,8 @@ public class ConfigMcpSyncServiceTests
             toolClient,
             registryService,
             configService,
-            new ConfigMcpProjectsJsonMerger());
+            new ConfigMcpProjectsJsonMerger(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ConfigMcpSyncService>.Instance);
 
         return (service, instanceId, instanceRepo, infobaseRepo, exportRepo);
     }

@@ -10,7 +10,6 @@ public sealed class HubModeSelectorViewModel : ObservableObject
     private readonly VaultViewModel _vaultViewModel;
     private readonly SyncAgentViewModel _syncAgentViewModel;
     private bool _rememberMode;
-    private string _hubListenUrl = "http://0.0.0.0:18443";
     private string _statusMessage = string.Empty;
     private bool _isBusy;
 
@@ -27,7 +26,6 @@ public sealed class HubModeSelectorViewModel : ObservableObject
 
         var settings = LocalAppSettings.Load();
         RememberMode = settings.Mode is not null;
-        HubListenUrl = settings.HubListenUrl;
 
         SelectHubCommand = new RelayCommand(SelectHubAsync, () => !IsBusy);
         SelectAgentCommand = new RelayCommand(SelectAgentAsync, () => !IsBusy);
@@ -37,12 +35,6 @@ public sealed class HubModeSelectorViewModel : ObservableObject
     {
         get => _rememberMode;
         set => SetProperty(ref _rememberMode, value);
-    }
-
-    public string HubListenUrl
-    {
-        get => _hubListenUrl;
-        set => SetProperty(ref _hubListenUrl, value);
     }
 
     public string StatusMessage
@@ -71,7 +63,8 @@ public sealed class HubModeSelectorViewModel : ObservableObject
             IsBusy = true;
             StatusMessage = string.Empty;
 
-            _hubRuntimeService.ConfigureListenUrl(HubListenUrl);
+            var settings = LocalAppSettings.Load();
+            _hubRuntimeService.ConfigureListenUrl(settings.HubListenUrl);
             await _hubRuntimeService.StartReceiverAsync();
 
             SaveMode(AppRunMode.Hub);
@@ -101,7 +94,6 @@ public sealed class HubModeSelectorViewModel : ObservableObject
 
         var settings = LocalAppSettings.Load();
         settings.Mode = mode;
-        settings.HubListenUrl = HubListenUrl;
         settings.Save();
     }
 }

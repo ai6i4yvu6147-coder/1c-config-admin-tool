@@ -26,7 +26,6 @@ public sealed class ClientEditViewModel : ObservableObject
 
         SaveCommand = new RelayCommand(SaveAsync);
         BrowseExportRootCommand = new RelayCommand(BrowseExportRoot);
-        BackCommand = new RelayCommand(() => _navigationService.GoBack());
     }
 
     public string Name
@@ -57,9 +56,8 @@ public sealed class ClientEditViewModel : ObservableObject
 
     public RelayCommand SaveCommand { get; }
     public RelayCommand BrowseExportRootCommand { get; }
-    public RelayCommand BackCommand { get; }
 
-    public void BeginCreate()
+    public Task<bool> PrepareCreateAsync()
     {
         _editingId = null;
         Name = string.Empty;
@@ -67,13 +65,14 @@ public sealed class ClientEditViewModel : ObservableObject
         Comment = string.Empty;
         StatusMessage = string.Empty;
         RaisePropertyChanged(nameof(Title));
+        return Task.FromResult(true);
     }
 
-    public async void BeginEdit(string clientName)
+    public async Task<bool> PrepareEditAsync(string clientName)
     {
         var client = await _profileService.GetClientByNameAsync(clientName);
         if (client is null)
-            return;
+            return false;
 
         _editingId = client.Id;
         Name = client.Name;
@@ -81,6 +80,7 @@ public sealed class ClientEditViewModel : ObservableObject
         Comment = client.Comment ?? string.Empty;
         StatusMessage = string.Empty;
         RaisePropertyChanged(nameof(Title));
+        return true;
     }
 
     private void BrowseExportRoot()
@@ -100,7 +100,7 @@ public sealed class ClientEditViewModel : ObservableObject
                 return;
             }
 
-            await _profileService.AddOrUpdateClientAsync(Name, ExportRootPath, Comment);
+            await _profileService.AddOrUpdateClientAsync(Name, ExportRootPath, Comment, _editingId);
             _navigationService.GoBack();
         }
         catch (Exception ex)

@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Controls;
 using ConfigAdmin.Wpf.ViewModels;
 
@@ -8,11 +9,12 @@ public partial class SyncAgentView
     public SyncAgentView()
     {
         InitializeComponent();
+        DataContextChanged += OnDataContextChanged;
     }
 
-    private void PairingPasswordChanged(object sender, System.Windows.RoutedEventArgs e)
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (DataContext is SyncAgentViewModel vm)
-            vm.PairingPassword = PairingPasswordBox.Password;
+        if (e.NewValue is SyncAgentViewModel vm && string.IsNullOrEmpty(vm.PairingPassword))
+            PairingPasswordBox.Password = string.Empty;
     }
 }

@@ -53,9 +53,8 @@ public sealed class ProcessRunner
         {
             await process.WaitForExitAsync(timeoutCts.Token);
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
-            timedOut = true;
             try
             {
                 if (!process.HasExited)
@@ -65,6 +64,11 @@ public sealed class ProcessRunner
             {
                 // ignored
             }
+
+            if (ct.IsCancellationRequested)
+                throw;
+
+            timedOut = true;
         }
 
         sw.Stop();

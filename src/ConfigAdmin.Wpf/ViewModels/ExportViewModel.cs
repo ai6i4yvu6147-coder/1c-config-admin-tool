@@ -9,7 +9,7 @@ using ConfigAdmin.Wpf.Services;
 
 namespace ConfigAdmin.Wpf.ViewModels;
 
-public sealed class ExportViewModel : ObservableObject
+public sealed class ExportViewModel : BusyViewModelBase
 {
     private readonly ExportService _exportService;
     private readonly ProfileService _profileService;
@@ -21,12 +21,11 @@ public sealed class ExportViewModel : ObservableObject
 
     private Guid _baseId;
     private string _baseDisplayName = string.Empty;
+    private ExportFormat _exportFormat = ExportFormat.Hierarchical;
     private bool _isRemoteBase;
     private bool _syncToMcpAfterExport = true;
     private string _mcpFollowUpText = string.Empty;
     private string _progressText = string.Empty;
-    private string _statusMessage = string.Empty;
-    private bool _isBusy;
     private readonly List<Guid> _activeJobIds = [];
 
     public ExportViewModel(
@@ -50,7 +49,6 @@ public sealed class ExportViewModel : ObservableObject
 
         ExportCommand = new RelayCommand(ExportAsync, CanExport);
         RemoteSyncCommand = new RelayCommand(RemoteSyncAsync, CanRemoteSync);
-        BackCommand = new RelayCommand(() => _navigationService.GoBack());
     }
 
     public ObservableCollection<ExportPlanListItem> ExportPlanItems { get; }
@@ -94,27 +92,10 @@ public sealed class ExportViewModel : ObservableObject
         set => SetProperty(ref _progressText, value);
     }
 
-    public string StatusMessage
-    {
-        get => _statusMessage;
-        set => SetProperty(ref _statusMessage, value);
-    }
-
-    public bool IsBusy
-    {
-        get => _isBusy;
-        set
-        {
-            SetProperty(ref _isBusy, value);
-            CommandManager.InvalidateRequerySuggested();
-        }
-    }
-
     public RelayCommand ExportCommand { get; }
     public RelayCommand RemoteSyncCommand { get; }
-    public RelayCommand BackCommand { get; }
 
-    public async void Begin(Guid baseId, string displayName)
+    public async Task BeginAsync(Guid baseId, string displayName)
     {
         _baseId = baseId;
         BaseDisplayName = displayName;
@@ -135,30 +116,57 @@ public sealed class ExportViewModel : ObservableObject
         }
 
         IsRemoteBase = profile.ExportLocation == ExportLocation.Remote;
+        _exportFormat = profile.ExportFormat;
         var instances = await _configurationService.GetInstancesAsync(baseId);
         IsMcpSyncAvailable = instances.Any(i => i.IsMcpLinked && i.ExportEnabled);
         SyncToMcpAfterExport = IsMcpSyncAvailable;
         RaisePropertyChanged(nameof(IsMcpSyncAvailable));
 
-        var plan = await _configurationService.BuildExportPlanAsync(baseId);
-        foreach (var item in plan.Instances)
+        foreach (var instance in instances
+                     .OrderBy(i => i.Kind == ConfigurationKind.Base ? 0 : 1)
+                     .ThenBy(i => i.SortOrder)
+                     .ThenBy(i => i.DisplayName))
         {
             ExportPlanItems.Add(new ExportPlanListItem
             {
-                DisplayName = item.DisplayName,
-                KindLabel = item.Kind == ConfigurationKind.Base ? "основная" : "расширение",
-                DesignerName = item.DesignerName ?? "—"
+                InstanceId = instance.Id,
+                Kind = instance.Kind,
+                DisplayName = instance.DisplayName,
+                KindLabel = instance.Kind == ConfigurationKind.Base ? "основная" : "расширение",
+                DesignerName = instance.DesignerName ?? "—",
+                ExportEnabled = instance.ExportEnabled
             });
         }
 
-        if (!plan.HasWork)
+        if (ExportPlanItems.All(i => !i.ExportEnabled))
             StatusMessage = "План выгрузки пуст. Настройте конфигурации в карточке базы.";
     }
 
-    private bool CanExport() => !IsBusy && IsLocalBase && ExportPlanItems.Count > 0;
+    private InstanceExportPlan? BuildSessionPlan()
+    {
+        var enabled = ExportPlanItems.Where(i => i.ExportEnabled).ToList();
+        if (enabled.Count == 0)
+            return null;
+
+        return new InstanceExportPlan
+        {
+            Format = _exportFormat,
+            Instances = enabled.Select(i => new ExportInstancePlan
+            {
+                InstanceId = i.InstanceId,
+                Kind = i.Kind,
+                DisplayName = i.DisplayName,
+                DesignerName = i.DesignerName == "—" ? null : i.DesignerName
+            }).ToList()
+        };
+    }
+
+    private bool HasEnabledExportItems() => ExportPlanItems.Any(i => i.ExportEnabled);
+
+    private bool CanExport() => !IsBusy && IsLocalBase && HasEnabledExportItems();
 
     private bool CanRemoteSync() =>
-        !IsBusy && IsRemoteBase && ExportPlanItems.Count > 0 && _vaultSessionService.IsUnlocked;
+        !IsBusy && IsRemoteBase && HasEnabledExportItems() && _vaultSessionService.IsUnlocked;
 
     private async Task RemoteSyncAsync()
     {
@@ -174,9 +182,17 @@ public sealed class ExportViewModel : ObservableObject
 
         try
         {
+            var sessionPlan = BuildSessionPlan();
+            if (sessionPlan is null)
+            {
+                StatusMessage = "Выберите хотя бы одну конфигурацию для выгрузки.";
+                return;
+            }
+
             var jobs = await _remoteSyncOrchestrator.RequestSyncAsync(
                 _baseId,
-                SyncToMcpAfterExport && IsMcpSyncAvailable);
+                SyncToMcpAfterExport && IsMcpSyncAvailable,
+                sessionPlan);
 
             _activeJobIds.Clear();
             _activeJobIds.AddRange(jobs.Select(j => j.Id));
@@ -309,6 +325,13 @@ public sealed class ExportViewModel : ObservableObject
 
         try
         {
+            var sessionPlan = BuildSessionPlan();
+            if (sessionPlan is null)
+            {
+                StatusMessage = "Выберите хотя бы одну конфигурацию для выгрузки.";
+                return;
+            }
+
             var progress = new Progress<ExportProgress>(p =>
             {
                 ProgressText = string.IsNullOrWhiteSpace(p.Detail)
@@ -316,7 +339,7 @@ public sealed class ExportViewModel : ObservableObject
                     : $"{p.Stage}: {p.Detail} ({p.CompletedSteps}/{p.TotalSteps})";
             });
 
-            var result = await _exportService.ExportByIdAsync(_baseId, planOverride: null, progress);
+            var result = await _exportService.ExportByIdAsync(_baseId, planOverride: sessionPlan, progress);
 
             if (result.Success)
             {
@@ -378,9 +401,26 @@ public sealed class ExportViewModel : ObservableObject
     }
 }
 
-public sealed class ExportPlanListItem
+public sealed class ExportPlanListItem : ObservableObject
 {
+    private bool _exportEnabled;
+
+    public Guid InstanceId { get; init; }
+    public ConfigurationKind Kind { get; init; }
     public string DisplayName { get; init; } = string.Empty;
     public string KindLabel { get; init; } = string.Empty;
     public string DesignerName { get; init; } = string.Empty;
+
+    public bool ExportEnabled
+    {
+        get => _exportEnabled;
+        set
+        {
+            if (_exportEnabled == value)
+                return;
+
+            SetProperty(ref _exportEnabled, value);
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
 }

@@ -30,7 +30,6 @@ public sealed class ConfigurationTemplatesViewModel : ObservableObject, IRefresh
         AddCommand = new RelayCommand(BeginAdd);
         SaveCommand = new RelayCommand(SaveAsync);
         DeleteCommand = new RelayCommand(DeleteAsync, () => SelectedTemplate is { IsSystem: false });
-        BackCommand = new RelayCommand(() => _navigationService.GoBack());
     }
 
     public ObservableCollection<ConfigurationTemplateListItem> Templates { get; }
@@ -72,7 +71,6 @@ public sealed class ConfigurationTemplatesViewModel : ObservableObject, IRefresh
     public RelayCommand AddCommand { get; }
     public RelayCommand SaveCommand { get; }
     public RelayCommand DeleteCommand { get; }
-    public RelayCommand BackCommand { get; }
 
     public Task RefreshOnNavigateAsync() => RefreshAsync();
 

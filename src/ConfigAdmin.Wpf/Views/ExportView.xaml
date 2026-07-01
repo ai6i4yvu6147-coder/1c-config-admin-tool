@@ -6,19 +6,24 @@
             <TextBlock Text="Выгрузка" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,8" />
             <TextBlock Text="{Binding BaseDisplayName}" FontSize="14" Margin="0,0,0,16" />
 
-            <TextBlock Text="План выгрузки (из настроек базы)" FontWeight="SemiBold" Margin="0,0,0,8" />
+            <TextBlock Text="План выгрузки" FontWeight="SemiBold" Margin="0,0,0,8" />
             <DataGrid ItemsSource="{Binding ExportPlanItems}"
                       AutoGenerateColumns="False"
-                      IsReadOnly="True"
+                      IsReadOnly="False"
                       CanUserAddRows="False"
-                      Margin="0,0,0,12"
+                      Margin="0,0,0,4"
                       MinHeight="100">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Конфигурация" Binding="{Binding DisplayName}" Width="*" />
-                    <DataGridTextColumn Header="Тип" Binding="{Binding KindLabel}" Width="100" />
-                    <DataGridTextColumn Header="Имя в конфигураторе" Binding="{Binding DesignerName}" Width="160" />
+                    <DataGridCheckBoxColumn Header="Выгрузить"
+                                            Binding="{Binding ExportEnabled, UpdateSourceTrigger=PropertyChanged}"
+                                            Width="90" />
+                    <DataGridTextColumn Header="Конфигурация" Binding="{Binding DisplayName}" Width="*" IsReadOnly="True" />
+                    <DataGridTextColumn Header="Тип" Binding="{Binding KindLabel}" Width="100" IsReadOnly="True" />
+                    <DataGridTextColumn Header="Имя в конфигураторе" Binding="{Binding DesignerName}" Width="160" IsReadOnly="True" />
                 </DataGrid.Columns>
             </DataGrid>
+            <TextBlock Text="Изменения действуют только для этого запуска и не сохраняются в настройках базы."
+                       TextWrapping="Wrap" Foreground="Gray" Margin="0,0,0,12" />
 
             <CheckBox Content="Синхронизировать с config-mcp после выгрузки"
                       IsChecked="{Binding SyncToMcpAfterExport}"
@@ -39,13 +44,12 @@
                         Visibility="{Binding IsLocalBase, Converter={StaticResource BoolToVisibility}}" />
                 <Button Content="Выгрузить и синхронизировать с RDP"
                         Command="{Binding RemoteSyncCommand}"
-                        Padding="12,6" Margin="0,0,8,0"
+                        Padding="12,6"
                         Visibility="{Binding IsRemoteBase, Converter={StaticResource BoolToVisibility}}" />
-                <Button Content="Назад" Command="{Binding BackCommand}" Padding="12,6" />
             </StackPanel>
 
             <TextBlock Margin="0,16,0,0" TextWrapping="Wrap" Foreground="Gray"
-                       Text="План настраивается в карточке базы. Remote: одна sync-задача на каждую конфигурацию в плане." />
+                       Text="По умолчанию план берётся из карточки базы. Remote: одна sync-задача на каждую отмеченную конфигурацию." />
         </StackPanel>
     </ScrollViewer>
 </UserControl>

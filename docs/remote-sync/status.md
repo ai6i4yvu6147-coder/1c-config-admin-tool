@@ -1,6 +1,6 @@
 ## Remote Sync — текущий статус
 
-*Обновлено: 2026-06-30*
+*Обновлено: 2026-07-01*
 
 ### Итог Phase R-Ping + R1 (E2E)
 
@@ -38,7 +38,10 @@
 | WPF: Local/Remote в карточке базы | `BaseEditView`, `BaseEditViewModel` |
 | WPF: «Выгрузить и синхронизировать с RDP» | `ExportView`, `ExportViewModel` |
 | WPF: progress bar Передатчика | `SyncAgentView`, `SyncAgentViewModel` |
+| WPF: **ручная очистка** job-каталогов / полный сброс агента (B4) | `AgentDataCleanupService`, `SyncAgentView` |
 | WPF: CRUD RDP-узлов, online/offline | `RemoteNodesView` |
+| WPF: **Настройки Hub** (listen URL, смена режима Админка/Передатчик) | `HubSettingsView`, `AppModeService` |
+| WPF: shell-навигация, корректный shutdown процесса | `MainWindow`, `NavigationService`, `App.xaml.cs` |
 | Tailscale Funnel (скрипты) | `setup-tailscale-funnel.ps1`, `start-sync-tunnel.bat` |
 | Тесты | `JobCredentialsCipherTests`, `SyncUploadIntegrationTests`, `ExportDirectoryMonitorTests`, … |
 
@@ -52,7 +55,6 @@
 - Расширения конфигурации в Remote sync (MVP — только основная конфигурация)
 - Автопереподключение Передатчика при длительном обрыве
 - **Оптимизация скорости upload** (~800 MB / 30+ мин через Funnel — см. [`implementation-plan.md`](implementation-plan.md) R2.6)
-- **Cleanup на RDP (B4):** две кнопки на Передатчике — job-каталоги / полная очистка `%AppData%\ConfigAdmin\`; см. [`../todo.md`](../todo.md) § B4
 - **Упрощение GUI** Remote Sync (Hub + Передатчик — сейчас перегружен; проработка UX отдельно)
 - **Hub H6:** orchestration `rebuild-index` — **готово** (2026-06-30)
 
@@ -62,9 +64,9 @@
 |---------|---------|--------|
 | `HttpClient.Timeout of 30 seconds` на upload | Chunk ~8 MB через Funnel дольше 30 с; клиент не совпадал с transport.md (120 s) | **исправлено:** chunk 180 s, complete 600 s, retry chunk ×3 |
 | Плотный журнал Передатчика во время export | Каждый tick монитора (12 с) писался в `LogLines` | **исправлено:** routine progress только в CurrentProgress + heartbeat |
-| Файлы на RDP после успешного sync | `TryCleanupWorkDir` только текущий job | **открыто (B4):** 2 кнопки — job dirs / полная очистка ConfigAdmin на RDP |
+| Файлы на RDP после успешного sync | `TryCleanupWorkDir` только текущий job | **исправлено (B4, 2026-06-30):** кнопки «Очистить job-каталоги» / «Полная очистка» на Передатчике |
 | MCP не видит выгруженную конфигурацию | `rebuild-index` не запускался | **исправлено (H6, 2026-06-30)** |
-| Hub вылетает при повторном открытии карточки базы | та же ИБ, без сообщений; debug | **открыто (B2, P0)** |
+| Hub вылетает при повторном открытии карточки базы | detached view + singleton VM + `Clients.Clear()` | **исправлено (B2, 2026-06-30)** |
 
 ---
 

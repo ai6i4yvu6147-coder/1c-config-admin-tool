@@ -14,7 +14,8 @@
                 Padding="0,0,0,8"
                 BorderBrush="#DDD"
                 BorderThickness="0,0,0,1">
-            <Button Content="← Назад (Esc)"
+            <Button x:Name="BackButton"
+                    Content="← Назад (Esc)"
                     Click="GoBackClick"
                     Padding="10,4"
                     HorizontalAlignment="Left" />

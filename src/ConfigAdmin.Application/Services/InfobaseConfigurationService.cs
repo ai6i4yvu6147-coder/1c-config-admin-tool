@@ -198,6 +198,15 @@ public sealed class InfobaseConfigurationService
         };
     }
 
+    public async Task<IReadOnlyDictionary<Guid, string>> GetExportSummariesForAllBasesAsync(
+        CancellationToken ct = default)
+    {
+        var allInstances = await _instanceRepository.GetAllAsync(ct);
+        return allInstances
+            .GroupBy(i => i.InfobaseId)
+            .ToDictionary(g => g.Key, g => BuildExportSummary(g.ToList()));
+    }
+
     public static string BuildExportSummary(IReadOnlyList<ConfigurationInstance> instances)
     {
         var enabled = instances

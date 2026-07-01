@@ -16,6 +16,7 @@ public sealed class SyncAgentConnectionService : IAsyncDisposable
     private string? _accessToken;
     private int _pollIntervalMs = SyncAgentHubService.DefaultPollIntervalMs;
     private bool _processingJob;
+    private bool _suppressEvents;
     private Guid? _activeJobId;
     private string? _lastProgressMessage;
     private DateTimeOffset _lastProgressHeartbeatUtc;
@@ -41,6 +42,7 @@ public sealed class SyncAgentConnectionService : IAsyncDisposable
     public string StatusText { get; private set; } = "Отключено";
     public string? CurrentProgress { get; private set; }
     public bool IsBusy => _processingJob;
+    public Guid? ActiveJobId => _processingJob ? _activeJobId : null;
 
     public async Task ConnectAsync(
         string hubUrl,
@@ -74,37 +76,63 @@ public sealed class SyncAgentConnectionService : IAsyncDisposable
         AddLog($"Register OK, poll={_pollIntervalMs}ms");
     }
 
-    public async Task DisconnectAsync()
+    public async Task DisconnectAsync(CancellationToken ct = default) =>
+        await StopLoopAsync(ct, suppressEvents: false);
+
+    public Task ShutdownAsync(CancellationToken ct = default) =>
+        StopLoopAsync(ct, suppressEvents: true);
+
+    public async ValueTask DisposeAsync() => await ShutdownAsync();
+
+    private async Task StopLoopAsync(CancellationToken ct, bool suppressEvents)
     {
         if (_loopCts is null)
             return;
 
-        _loopCts.Cancel();
-        if (_loopTask is not null)
+        _suppressEvents = suppressEvents;
+        var loopCts = _loopCts;
+        var loopTask = _loopTask;
+
+        loopCts.Cancel();
+        if (loopTask is not null)
         {
             try
             {
-                await _loopTask;
+                await loopTask.WaitAsync(ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
             }
             catch (OperationCanceledException)
             {
-                // expected
+                // expected when the agent loop is cancelled
             }
         }
 
-        _loopCts.Dispose();
+        loopCts.Dispose();
         _loopCts = null;
         _loopTask = null;
         _accessToken = null;
         _activeJobId = null;
+        _processingJob = false;
         CurrentProgress = null;
 
-        StatusText = "Отключено";
-        ConnectionStateChanged?.Invoke(false);
-        AddLog("Disconnected");
-    }
+        if (!_suppressEvents)
+        {
+            ProgressChanged?.Invoke(null);
+            StatusText = "Отключено";
+            ConnectionStateChanged?.Invoke(false);
+            AddLog("Disconnected");
+        }
+        else
+        {
+            StatusText = "Отключено";
+            _jobProcessor.ProgressChanged -= OnJobProgress;
+        }
 
-    public async ValueTask DisposeAsync() => await DisconnectAsync();
+        _suppressEvents = false;
+    }
 
     private async Task RunLoopAsync(CancellationToken ct)
     {
@@ -206,6 +234,10 @@ public sealed class SyncAgentConnectionService : IAsyncDisposable
 
             AddLog($"Job {response.Job.JobId} completed");
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Job processing failed");
@@ -249,6 +281,9 @@ public sealed class SyncAgentConnectionService : IAsyncDisposable
 
     private void OnJobProgress(JobProgressUpdate update)
     {
+        if (_suppressEvents)
+            return;
+
         CurrentProgress = update.Message;
         ProgressChanged?.Invoke(update.Message);
         if (update.WriteToJournal)
@@ -310,7 +345,13 @@ public sealed class SyncAgentConnectionService : IAsyncDisposable
         return "exporting";
     }
 
-    private void AddLog(string line) => LogLineAdded?.Invoke(line);
+    private void AddLog(string line)
+    {
+        if (_suppressEvents)
+            return;
+
+        LogLineAdded?.Invoke(line);
+    }
 
     private static string GetAgentVersion()
     {

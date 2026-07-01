@@ -30,7 +30,6 @@ public sealed class RemoteNodeEditViewModel : ObservableObject
         _navigationService = navigationService;
 
         SaveCommand = new RelayCommand(SaveAsync);
-        BackCommand = new RelayCommand(() => _navigationService.GoBack());
     }
 
     public IReadOnlyList<ClientOption> Clients
@@ -85,7 +84,6 @@ public sealed class RemoteNodeEditViewModel : ObservableObject
     public string NodeIdText => _editingId?.ToString() ?? "будет создан при сохранении";
 
     public RelayCommand SaveCommand { get; }
-    public RelayCommand BackCommand { get; }
 
     public async Task PrepareCreateAsync(string hubListenUrl)
     {

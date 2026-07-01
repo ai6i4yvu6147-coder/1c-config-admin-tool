@@ -18,12 +18,13 @@ public partial class MainWindow : Window
         UpdateNavBar();
 
         PreviewKeyDown += OnPreviewKeyDown;
-        Closing += OnClosing;
     }
 
     private void UpdateNavBar()
     {
-        NavBar.Visibility = _navigationService.CanGoBack ? Visibility.Visible : Visibility.Collapsed;
+        var canGoBack = _navigationService.CanGoBack;
+        NavBar.Visibility = canGoBack ? Visibility.Visible : Visibility.Collapsed;
+        BackButton.IsEnabled = canGoBack;
     }
 
     private void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -33,15 +34,6 @@ public partial class MainWindow : Window
 
         _navigationService.GoBack();
         e.Handled = true;
-    }
-
-    private void OnClosing(object? sender, CancelEventArgs e)
-    {
-        if (!_navigationService.CanGoBack)
-            return;
-
-        e.Cancel = true;
-        _navigationService.GoBack();
     }
 
     private void GoBackClick(object sender, RoutedEventArgs e) => _navigationService.GoBack();

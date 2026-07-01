@@ -1,3 +1,4 @@
+using ConfigAdmin.Domain.Enums;
 using ConfigAdmin.Domain.Integration;
 using ConfigAdmin.Domain.Models;
 using ConfigAdmin.Domain.Repositories;
@@ -39,5 +40,27 @@ public sealed class ConnectionTestService
             : null;
 
         return await _cliAdapter.TestConnectionAsync(profile, password, ct);
+    }
+
+    public Task<ProcessResult> TestDraftAsync(
+        string platformPath,
+        ConnectionType connectionType,
+        string connectionString,
+        string? username,
+        string? password,
+        CancellationToken ct = default)
+    {
+        if (!File.Exists(platformPath))
+            throw new FileNotFoundException($"Не найден 1cv8.exe: {platformPath}", platformPath);
+
+        var draft = new InfobaseProfile
+        {
+            PlatformPath = platformPath,
+            ConnectionType = connectionType,
+            ConnectionString = connectionString,
+            Username = username
+        };
+
+        return _cliAdapter.TestConnectionAsync(draft, password, ct);
     }
 }
