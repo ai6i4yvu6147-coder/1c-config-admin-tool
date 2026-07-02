@@ -140,6 +140,23 @@ public sealed class DatabaseInitializer
               exported_at TEXT,
               is_current INTEGER NOT NULL DEFAULT 1
             );
+
+            CREATE TABLE IF NOT EXISTS data_mcp_settings (
+              tool_instance_id TEXT PRIMARY KEY REFERENCES tool_instances(id) ON DELETE CASCADE,
+              endpoint TEXT NOT NULL,
+              region TEXT NOT NULL,
+              bucket TEXT NOT NULL,
+              default_prefix TEXT NOT NULL DEFAULT '',
+              sealed_secrets_path TEXT NOT NULL DEFAULT 'credentials.sealed.json',
+              encrypted_dmcp_password BLOB
+            );
+
+            CREATE TABLE IF NOT EXISTS data_connections (
+              id TEXT PRIMARY KEY,
+              infobase_id TEXT NOT NULL UNIQUE REFERENCES infobases(id) ON DELETE CASCADE,
+              databaseid TEXT NOT NULL,
+              display_name TEXT NOT NULL
+            );
             """;
 
         await connection.ExecuteAsync(new CommandDefinition(sql, cancellationToken: ct));

@@ -225,6 +225,14 @@ listBasesCommand.SetHandler(async (dbPath) =>
     });
 }, dbOption);
 
+var mcpCommand = new Command("mcp", "Hub MCP server (passive context tools)");
+var mcpServeCommand = new Command("serve", "Start stdio MCP server: list_clients, list_infobases, resolve_infobase_context");
+mcpServeCommand.SetHandler(async (dbPath) =>
+{
+    await ConfigAdmin.Console.McpServeHost.RunAsync(dbPath);
+}, dbOption);
+mcpCommand.AddCommand(mcpServeCommand);
+
 rootCommand.AddCommand(initVaultCommand);
 rootCommand.AddCommand(unlockCommand);
 rootCommand.AddCommand(addClientCommand);
@@ -234,6 +242,7 @@ rootCommand.AddCommand(exportCommand);
 rootCommand.AddCommand(exportAllCommand);
 rootCommand.AddCommand(listRunsCommand);
 rootCommand.AddCommand(listBasesCommand);
+rootCommand.AddCommand(mcpCommand);
 
 return await rootCommand.InvokeAsync(args);
 

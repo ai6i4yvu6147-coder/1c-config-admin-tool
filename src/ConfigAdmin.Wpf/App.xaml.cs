@@ -42,6 +42,8 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<BaseEditViewModel>();
                 services.AddSingleton<ExportViewModel>();
                 services.AddSingleton<ConfigMcpViewModel>();
+                services.AddSingleton<DataMcpViewModel>();
+                services.AddSingleton<McpHubViewModel>();
                 services.AddSingleton<LogsViewModel>();
                 services.AddSingleton<HubModeSelectorViewModel>();
                 services.AddSingleton<HubSettingsViewModel>();

@@ -8,6 +8,7 @@ namespace ConfigAdmin.Application.Hub;
 public sealed class ManagedToolRegistryService
 {
     public const string DefaultConfigMcpRootPath = @"C:\1c_config_mcp_server_Portable";
+    public const string DefaultDataMcpRootPath = @"C:\projects\1c-data-mcp_Portable";
 
     private readonly IToolInstanceRepository _toolInstanceRepository;
     private readonly ModuleManifestReader _manifestReader;
@@ -40,6 +41,26 @@ public sealed class ManagedToolRegistryService
     public Task SaveConfigMcpRootPathAsync(string rootPath, CancellationToken ct = default) =>
         SaveRootPathAsync(HubModuleIds.ConfigMcp, rootPath, ct);
 
+    public async Task<ToolInstanceProfile> GetOrCreateDataMcpInstanceAsync(CancellationToken ct = default)
+    {
+        var existing = await _toolInstanceRepository.GetByModuleIdAsync(HubModuleIds.DataMcp, ct);
+        if (existing is not null)
+            return existing;
+
+        var seeded = new ToolInstanceProfile
+        {
+            Id = Guid.NewGuid(),
+            ModuleId = HubModuleIds.DataMcp,
+            RootPath = DefaultDataMcpRootPath,
+            Enabled = true
+        };
+        await _toolInstanceRepository.SaveAsync(seeded, ct);
+        return seeded;
+    }
+
+    public Task SaveDataMcpRootPathAsync(string rootPath, CancellationToken ct = default) =>
+        SaveRootPathAsync(HubModuleIds.DataMcp, rootPath, ct);
+
     public async Task SaveRootPathAsync(string moduleId, string rootPath, CancellationToken ct = default)
     {
         var instance = await _toolInstanceRepository.GetByModuleIdAsync(moduleId, ct)
@@ -57,6 +78,12 @@ public sealed class ManagedToolRegistryService
     public async Task<string> ResolveConfigMcpCliPathAsync(CancellationToken ct = default)
     {
         var instance = await GetOrCreateConfigMcpInstanceAsync(ct);
+        return ResolveCliPath(instance.RootPath);
+    }
+
+    public async Task<string> ResolveDataMcpCliPathAsync(CancellationToken ct = default)
+    {
+        var instance = await GetOrCreateDataMcpInstanceAsync(ct);
         return ResolveCliPath(instance.RootPath);
     }
 

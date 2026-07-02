@@ -11,6 +11,7 @@ public sealed class SyncAgentJobProcessor
     private readonly RemoteConfigurationExportService _exportService;
     private readonly AgentWorkDirectoryResolver _workDirectoryResolver;
     private readonly AgentResumeStore _resumeStore;
+    private readonly AgentDataCleanupService _cleanupService;
     private readonly ILogger<SyncAgentJobProcessor> _logger;
 
     public SyncAgentJobProcessor(
@@ -18,12 +19,14 @@ public sealed class SyncAgentJobProcessor
         RemoteConfigurationExportService exportService,
         AgentWorkDirectoryResolver workDirectoryResolver,
         AgentResumeStore resumeStore,
+        AgentDataCleanupService cleanupService,
         ILogger<SyncAgentJobProcessor> logger)
     {
         _client = client;
         _exportService = exportService;
         _workDirectoryResolver = workDirectoryResolver;
         _resumeStore = resumeStore;
+        _cleanupService = cleanupService;
         _logger = logger;
     }
 
@@ -145,7 +148,7 @@ public sealed class SyncAgentJobProcessor
             Report($"Done: {complete.AppliedPath}");
 
             _resumeStore.Delete(sessionId);
-            TryCleanupWorkDir(workRoot, configPath, zipPath);
+            TryCleanupJobArtifacts(job.JobId, agentWorkRoot, workRoot, configPath);
         }
         catch
         {
@@ -190,20 +193,23 @@ public sealed class SyncAgentJobProcessor
         ex is TaskCanceledException or TimeoutException or SyncAgentClientException { StatusCode: 0 }
         || ex.InnerException is TaskCanceledException or TimeoutException;
 
-    private void TryCleanupWorkDir(string workRoot, string configPath, string zipPath)
+    private void TryCleanupJobArtifacts(
+        Guid jobId,
+        string? agentWorkRoot,
+        string workRoot,
+        string configPath)
     {
         try
         {
-            if (File.Exists(zipPath))
-                File.Delete(zipPath);
-            if (Directory.Exists(configPath))
-                Directory.Delete(configPath, recursive: true);
-            if (Directory.Exists(workRoot) && !Directory.EnumerateFileSystemEntries(workRoot).Any())
-                Directory.Delete(workRoot, recursive: true);
+            var exportOutsideWorkRoot = AgentDataCleanupService.IsUnderDirectory(configPath, workRoot)
+                ? null
+                : configPath;
+
+            _cleanupService.CleanupCompletedJob(jobId, agentWorkRoot, exportOutsideWorkRoot);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to cleanup work dir {WorkRoot}", workRoot);
+            _logger.LogWarning(ex, "Failed to cleanup job directory {WorkRoot}", workRoot);
         }
     }
 

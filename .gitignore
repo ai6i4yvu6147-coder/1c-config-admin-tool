@@ -4,6 +4,7 @@ obj/
 out/
 dist/
 publish/
+artifacts/
 *.user
 *.suo
 *.userosscache

@@ -105,7 +105,7 @@
 |----------|------------|
 | `list_clients` / `list_infobases` / `list_configuration_templates` | Где можно работать |
 | `get_infobase_state` / `get_tool_readiness` | Свежий export, индекс, help, data-connection |
-| `resolve_infobase_context` | Полный контекст задачи для агента (refs: C-MCP + D-MCP `database_id`; **без S3 credentials**) — см. [`admin-hub/registry-mapping-data-mcp.md`](admin-hub/registry-mapping-data-mcp.md) |
+| `resolve_infobase_context` | Полный контекст задачи для агента: C-MCP `projectFilter` / `extensionFilter`, D-MCP `databaseId`, `credentialsState` (**без S3 credentials**) — см. [`admin-hub/registry-mapping-data-mcp.md`](admin-hub/registry-mapping-data-mcp.md) |
 | `suggest_next_steps` | «Обнови export», «rebuild index», и т.д. |
 | `search_knowledge_by_context` | Похожие кейсы по фильтрам |
 

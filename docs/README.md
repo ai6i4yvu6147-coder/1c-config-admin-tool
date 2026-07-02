@@ -33,11 +33,13 @@ Ecosystem protocol (canon for all group modules):
 - [`group/shared/protocol-v1.0.2-addendum.md`](group/shared/protocol-v1.0.2-addendum.md)
 - [`group/shared/protocol-v1.0.3-addendum.md`](group/shared/protocol-v1.0.3-addendum.md)
 - [`group/shared/protocol-v1.0.4-addendum.md`](group/shared/protocol-v1.0.4-addendum.md)
+- [`group/shared/protocol-v1.0.5-addendum.md`](group/shared/protocol-v1.0.5-addendum.md)
+- [`group/shared/protocol-v1.0.6-addendum.md`](group/shared/protocol-v1.0.6-addendum.md)
 - [`group/shared/registry-mapping.md`](group/shared/registry-mapping.md) (Hub ↔ config-mcp)
 
 Hub ↔ data-mcp mapping (agreed 2026-07-01): [`admin-hub/registry-mapping-data-mcp.md`](admin-hub/registry-mapping-data-mcp.md).
 
-On conflict: **v1.0.4 > v1.0.3 > v1.0.2 > v1.0.1 > v1**.
+On conflict: **v1.0.6 > v1.0.5 > v1.0.4 > v1.0.3 > v1.0.2 > v1.0.1 > v1**.
 
 Admin-hub pointer stubs (compatibility): [`admin-hub/README.md`](admin-hub/README.md).
 

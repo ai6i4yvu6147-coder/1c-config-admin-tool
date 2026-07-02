@@ -290,7 +290,10 @@ public sealed class SyncReceiverHost : IAsyncDisposable
             if (job?.SyncMcpAfterComplete == true)
             {
                 var mcp = rootServices.GetRequiredService<ConfigMcpSyncService>();
-                _ = await mcp.SyncInfobaseAsync(job.InfobaseId, context.RequestAborted);
+                if (job.ConfigurationInstanceId is Guid instanceId)
+                    _ = await mcp.SyncInstanceAsync(instanceId, context.RequestAborted);
+                else
+                    _ = await mcp.SyncInfobaseAsync(job.InfobaseId, context.RequestAborted);
             }
 
             return Results.Json(result, JsonOptions);

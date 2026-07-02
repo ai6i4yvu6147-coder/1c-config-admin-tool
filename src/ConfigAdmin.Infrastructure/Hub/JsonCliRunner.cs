@@ -23,6 +23,13 @@ public sealed class JsonCliRunner
     public async Task<JsonCliResult> RunJsonAsync(
         string executablePath,
         IReadOnlyList<string> arguments,
+        CancellationToken ct = default) =>
+        await RunJsonAsync(executablePath, arguments, environment: null, ct);
+
+    public async Task<JsonCliResult> RunJsonAsync(
+        string executablePath,
+        IReadOnlyList<string> arguments,
+        IReadOnlyDictionary<string, string>? environment,
         CancellationToken ct = default)
     {
         if (!File.Exists(executablePath))
@@ -36,6 +43,12 @@ public sealed class JsonCliRunner
             RedirectStandardError = true,
             CreateNoWindow = true
         };
+
+        if (environment is not null)
+        {
+            foreach (var (key, value) in environment)
+                psi.Environment[key] = value;
+        }
 
         foreach (var arg in arguments)
             psi.ArgumentList.Add(arg);
@@ -63,9 +76,16 @@ public sealed class JsonCliRunner
     public async Task<T> RunAndDeserializeAsync<T>(
         string executablePath,
         IReadOnlyList<string> arguments,
+        CancellationToken ct = default) =>
+        await RunAndDeserializeAsync<T>(executablePath, arguments, environment: null, ct);
+
+    public async Task<T> RunAndDeserializeAsync<T>(
+        string executablePath,
+        IReadOnlyList<string> arguments,
+        IReadOnlyDictionary<string, string>? environment,
         CancellationToken ct = default)
     {
-        var result = await RunJsonAsync(executablePath, arguments, ct);
+        var result = await RunJsonAsync(executablePath, arguments, environment, ct);
         var json = ExtractJsonPayload(result);
         if (string.IsNullOrWhiteSpace(json))
             throw new InvalidOperationException(
@@ -78,9 +98,16 @@ public sealed class JsonCliRunner
     public async Task<(T Response, JsonCliResult Raw)> RunAndDeserializeWithRawAsync<T>(
         string executablePath,
         IReadOnlyList<string> arguments,
+        CancellationToken ct = default) =>
+        await RunAndDeserializeWithRawAsync<T>(executablePath, arguments, environment: null, ct);
+
+    public async Task<(T Response, JsonCliResult Raw)> RunAndDeserializeWithRawAsync<T>(
+        string executablePath,
+        IReadOnlyList<string> arguments,
+        IReadOnlyDictionary<string, string>? environment,
         CancellationToken ct = default)
     {
-        var result = await RunJsonAsync(executablePath, arguments, ct);
+        var result = await RunJsonAsync(executablePath, arguments, environment, ct);
         var json = ExtractJsonPayload(result);
         if (string.IsNullOrWhiteSpace(json))
             throw new InvalidOperationException(

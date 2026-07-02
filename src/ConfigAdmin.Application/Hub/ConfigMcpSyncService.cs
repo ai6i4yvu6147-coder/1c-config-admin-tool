@@ -92,7 +92,25 @@ public sealed class ConfigMcpSyncService
     }
 
     /// <summary>
-    /// Sync all linked instances for one infobase (used after export / remote sync).
+    /// Sync linked instances from an explicit list (e.g. session export plan).
+    /// </summary>
+    public async Task<ConfigMcpSyncResult> SyncInstancesAsync(
+        IEnumerable<Guid> instanceIds,
+        CancellationToken ct = default)
+    {
+        var instances = new List<ConfigurationInstance>();
+        foreach (var id in instanceIds.Distinct())
+        {
+            var instance = await _instanceRepository.GetByIdAsync(id, ct);
+            if (instance is not null && instance.IsMcpLinked)
+                instances.Add(instance);
+        }
+
+        return await SyncInstancesCoreAsync(instances, "Нет привязанных экземпляров для синхронизации.", ct);
+    }
+
+    /// <summary>
+    /// Sync all linked instances for one infobase (used after full export).
     /// </summary>
     public async Task<ConfigMcpSyncResult> SyncInfobaseAsync(Guid infobaseId, CancellationToken ct = default)
     {
@@ -100,8 +118,16 @@ public sealed class ConfigMcpSyncService
             .Where(i => i.IsMcpLinked && i.ExportEnabled)
             .ToList();
 
+        return await SyncInstancesCoreAsync(instances, "Нет привязанных экземпляров для этой базы.", ct);
+    }
+
+    private async Task<ConfigMcpSyncResult> SyncInstancesCoreAsync(
+        IReadOnlyList<ConfigurationInstance> instances,
+        string emptyMessage,
+        CancellationToken ct)
+    {
         if (instances.Count == 0)
-            return Fail("Нет привязанных экземпляров для этой базы.");
+            return Fail(emptyMessage);
 
         if (instances.Count == 1)
             return await SyncInstanceAsync(instances[0].Id, ct);

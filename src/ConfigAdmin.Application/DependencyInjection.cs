@@ -31,6 +31,13 @@ public static class DependencyInjection
         services.AddSingleton<ConfigMcpFragmentBuilder>();
         services.AddSingleton<ConfigMcpProjectsJsonMerger>();
         services.AddSingleton<ConfigMcpSyncService>();
+        services.AddSingleton<DataMcpToolClient>();
+        services.AddSingleton<IDataMcpToolClient>(sp => sp.GetRequiredService<DataMcpToolClient>());
+        services.AddSingleton<DataMcpFragmentBuilder>();
+        services.AddSingleton<DataMcpSyncService>();
+        services.AddSingleton<DataMcpSettingsService>();
+        services.AddSingleton<DataMcpSealedCredentialsService>();
+        services.AddSingleton<InfobaseContextService>();
         services.AddSingleton<RemoteNodeService>();
         services.AddSingleton<RemoteSyncOrchestrator>();
         services.AddSingleton<SyncJobProgressStore>();

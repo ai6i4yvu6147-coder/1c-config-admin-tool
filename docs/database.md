@@ -25,6 +25,8 @@
 | `clients` | Клиент: id, name, comment, export_root_path |
 | `projects` | Hub-проект: id, client_id, name, active |
 | `tool_instances` | Managed tool: module_id (unique), root_path, enabled |
+| `data_mcp_settings` | D-MCP global bucket profile per tool_instance: endpoint, region, bucket, default_prefix, sealed_secrets_path, encrypted_dmcp_password |
+| `data_connections` | D-MCP pairing: id (dataConnectionId), infobase_id (unique), databaseid, display_name |
 | `infobases` | База 1С: подключение, platform_path, план выгрузки, last_export_*, project_id, config_mcp_project_id (legacy R1) |
 | `configuration_instances` | План выгрузки per infobase; MCP: `config_mcp_project_id`, `config_mcp_database_id` |
 | `configuration_exports` | Артефакт выгрузки (instance × время); id → `infobaseId` в config-mcp fragment |

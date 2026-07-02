@@ -23,6 +23,8 @@ public static class DependencyInjection
         services.AddSingleton<IExportRunRepository, ExportRunRepository>();
         services.AddSingleton<IVaultMetaRepository, VaultMetaRepository>();
         services.AddSingleton<IToolInstanceRepository, ToolInstanceRepository>();
+        services.AddSingleton<IDataMcpSettingsRepository, DataMcpSettingsRepository>();
+        services.AddSingleton<IDataConnectionRepository, DataConnectionRepository>();
         services.AddSingleton<IHubProjectRepository, HubProjectRepository>();
         services.AddSingleton<IRemoteNodeRepository, RemoteNodeRepository>();
         services.AddSingleton<IAgentSessionRepository, AgentSessionRepository>();

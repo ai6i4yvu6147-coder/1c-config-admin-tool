@@ -1,12 +1,14 @@
 # Согласованный mapping: Hub ↔ data-mcp
 
-**Статус:** **agreed** — Sub `protocol_ack` **2026-07-01** (`20260701T172000`) on merge `20260701T170000`  
-**Переговоры:** dispute `20260701T161500` → merge `20260701T170000` → ack `20260701T172000`
+**Статус:** **agreed** — Sub `protocol_ack` **2026-07-01** (`20260701T172000`) on merge `20260701T170000`; v1.0.5 ack **2026-07-02** (`20260702T180000`)  
+**Переговоры:** dispute `20260701T161500` → merge `20260701T170000` → ack `20260701T172000`; sync_delta `20260702T160000` → ack `20260702T180000` (v1.0.5, no dispute)
 
 **Связанные документы:**
 
 - [`integration.md`](integration.md) — роль Hub
 - [`../group/shared/protocol-v1.0.4-addendum.md`](../group/shared/protocol-v1.0.4-addendum.md) — §10.3 extension (D3)
+- [`../group/shared/protocol-v1.0.5-addendum.md`](../group/shared/protocol-v1.0.5-addendum.md) — CLI-only portable writes (ack 2026-07-02)
+- [`../group/shared/protocol-v1.0.6-addendum.md`](../group/shared/protocol-v1.0.6-addendum.md) — passive Hub + agent `unlock_credentials` (proposal 2026-07-02)
 - [`../group/shared/protocol-v1.0.1-addendum.md`](../group/shared/protocol-v1.0.1-addendum.md) §8.4, §11.3
 - [`registry-mapping.md`](../group/shared/registry-mapping.md) — аналог config-mcp (2026-06-28)
 - [`../domain-model.md`](../domain-model.md) — `resolve_infobase_context`
@@ -18,8 +20,8 @@
 - **data-mcp `databaseid`** — operational pairing ID от 1С; Hub `dataConnectionId` + `Infobase.id`.
 - **Глобальный bucket profile** — один профиль S3 на portable instance.
 - **S3 keys** — только **`credentials.sealed.json`** (encrypted D-MCP password). Hub **не** хранит ключи в SQLite.
-- **D-MCP password** — в Hub (`encrypted_dmcp_password`, vault) **только в `managed` mode**; для admin UI read/write sealed file; **не** агенту.
-- **Агент** — refs через `resolve_infobase_context`; D-MCP tools с `database_id` only.
+- **D-MCP password** — в Hub (`encrypted_dmcp_password`, vault) для **admin** Save / `apply-secrets`; **не** в agent context; runtime unlock — agent → D-MCP `unlock_credentials` (v1.0.6).
+- **Агент** — refs через `resolve_infobase_context`; unlock D-MCP через `unlock_credentials`; data tools с `database_id` only.
 - **Pairing** — 1С processing first-run; Hub записывает mapping после paste.
 - **Режимы** — `standalone` (полный compact UI) vs `managed` (Hub authoritative, local read-only).
 
@@ -49,7 +51,7 @@ flowchart LR
 |------|----------------|
 | **Agent** | Refs из Hub; MCP calls с `database_id` |
 | **Hub context tool** | SQLite only — **без** sealed file |
-| **Hub D-MCP settings** | Admin → `credentials.sealed.json` + `apply-registry` |
+| **Hub D-MCP settings** | Orchestration: SQLite persist → `apply-secrets` (S3) → `apply-registry` (metadata) → `validate-config` |
 | **D-MCP server** | S3 transport; keys из sealed file в памяти (unlock at startup) |
 | **1C processing** | Pairing; отдельные S3 keys в 1С |
 
@@ -79,6 +81,8 @@ flowchart LR
 | S3 access keys | **нет** | **нет** plaintext | да (encrypted) | **нет** |
 | D-MCP password | `encrypted_dmcp_password` (managed) | — | unlock key | **нет** |
 | Timeouts, limits | нет | да | — | нет |
+
+**Portable write surface (v1.0.5):** Hub и compact UI **не** пишут `config.local.json` / `credentials.sealed.json` напрямую. Единый путь — D-MCP CLI: `apply-registry` (metadata), `apply-secrets` (S3 sealed). См. [`protocol-v1.0.5-addendum.md`](../group/shared/protocol-v1.0.5-addendum.md).
 
 ---
 
@@ -118,12 +122,13 @@ Hub v1 не генерирует `database_id`. Ротация keys в sealed fi
 
 ### Кто нуждается в D-MCP password
 
-| Актор | Нужен? |
-|-------|--------|
-| Agent | **Нет** |
-| Hub context tool | **Нет** |
-| Hub D-MCP settings (managed) | **Да** |
-| D-MCP MCP server (startup) | **Да** |
+| Актор | Нужен? | Как |
+|-------|--------|-----|
+| Agent (data tools) | **Нет** | `database_id` only |
+| Agent (`unlock_credentials`) | **Да** (user-provided) | MCP tool once per process (v1.0.6) |
+| Hub context tool | **Нет** | refs + `credentialsState` hint only |
+| Hub D-MCP settings (admin) | **Да** | Save / `apply-secrets` |
+| D-MCP MCP server (startup) | **Опционально** | `DMCP_PASSWORD` env / tray (dev или без agent unlock) |
 
 ### Файл `credentials.sealed.json` (merged D1)
 
@@ -178,19 +183,24 @@ Hub v1 не генерирует `database_id`. Ротация keys в sealed fi
     "parallelism": 4
   },
   "cipher": "aes-256-gcm",
-  "payload": "AQIDBAUGBwgJCgvOIXlJripUWNWC0lrPzEFE5TSDAr2N6ZyFtMFML/A/kjqciTYQTaWiQXjxURCkWSj0ESJtKtKG9VthK6ak+2eDwbxTKIv37i6yaUFstECY"
+  "payload": "AQIDBAUGBwgJCgsMsEZbEjVmZkiENTP7PIq2jJtMk9zS0kbykZyThsSP6liih2SYJyRds6nsYZ2lefguNu1VPH5r3UpZgHOGmWEcnbcHQg3mYQFu+FtOu8MFHA=="
 }
 ```
 
-Phase 1: cross-repo decrypt test (D-H3 + Sub P1).
+Layout: `payload` = nonce (12) ‖ tag (16) ‖ ciphertext (base64). Authoritative Sub fixture: `fixtures/credentials-sealed-test-vector.json` (`1c-data-mcp`).
 
-### MCP server unlock (Cursor)
+Phase 1: cross-repo decrypt test (D-H3 + Sub P1). Payload corrected 2026-07-02 (Sub `sync_delta`); previous value did not decrypt with `SecretVault` layout.
+
+### MCP server unlock
 
 | Context | Unlock |
 |---------|--------|
-| Production / managed | Once at **MCP server process start** (compact CLI / tray helper **outside** Cursor) |
-| Dev / CI | `DMCP_PASSWORD` env or `--password-stdin` — **dev-only** |
-| Per MCP tool call | **Rejected** |
+| Agent workflow (v1.0.6) | MCP **`unlock_credentials`** — user password via agent, once per process |
+| Dev / CI / tray | `DMCP_PASSWORD` env at process start |
+| Compact UI | standalone operator unlock |
+| Hub | **does not** unlock runtime server (settings + context only) |
+
+Per **data** MCP tool call: password **rejected**. Dedicated unlock tool only (v1.0.6 amends v1.0.4 §3).
 
 ### Protocol deviation (§16)
 
@@ -227,7 +237,7 @@ Metadata only (§8.4). Default **`patch`**. Post-apply: `validate-config`, `ping
 
 ## Agent context tool: `resolve_infobase_context`
 
-Hub capability. **Refs only** — no credentials, no D-MCP password. Vault unlock **not** required.
+Hub capability (**passive**). **Refs only** — no credentials, no D-MCP password. Vault unlock **not** required. Hub **must not** spawn or unlock D-MCP (v1.0.6).
 
 ```json
 {
@@ -236,18 +246,43 @@ Hub capability. **Refs only** — no credentials, no D-MCP password. Vault unloc
   "clientName": "Ромашка",
   "configMcp": {
     "projectId": "uuid",
-    "projectName": "Ромашка",
+    "projectFilter": "Ромашка / Бухгалтерия prod",
+    "projectName": "Ромашка / Бухгалтерия prod",
     "instances": [
-      { "databaseId": "export-uuid", "displayName": "Основная конфигурация", "type": "base" }
+      {
+        "databaseId": "export-uuid",
+        "displayName": "Основная конфигурация",
+        "extensionFilter": "Основная конфигурация",
+        "type": "base"
+      }
     ]
   },
   "dataMcp": {
     "dataConnectionId": "uuid",
     "databaseId": "a1b2c3d4",
-    "paired": true
+    "paired": true,
+    "credentialsState": "locked"
   }
 }
 ```
+
+`credentialsState`: `locked` | `unlocked` | `unknown` — hint from last `status --json` or `unknown`.
+
+### C-MCP refs and naming (Head, 2026-07-02)
+
+| Field | Source | Use in config-mcp tools |
+|-------|--------|-------------------------|
+| `configMcp.projectFilter` | portable `status` by `projectId`, else `{clientName} / {infobaseName}` | **`project_filter`** (exact) |
+| `configMcp.instances[].extensionFilter` | portable `status` by `databaseId`, else `displayName` | **`extension_filter`** (exact) |
+| `configMcp.instances[].displayName` | Hub configuration instance label | UI / disambiguation only |
+
+**Registry sync naming (Hub → config-mcp):** project `name` = `{Client} / {Infobase}`; database `name` = configuration `displayName` only (no repeated infobase prefix). Existing `db_file` on portable is unchanged on rename.
+
+**Agent workflow:** call `resolve_infobase_context` first; use `projectFilter` / `extensionFilter` for C-MCP tools. `active_databases` remains useful for discovery, stale-index checks, and validation — not required when Hub filters are present and portable is in sync.
+
+### D-MCP MCP tool: `unlock_credentials` (v1.0.6)
+
+Agent calls when `credentialsState` is `locked` or data tool reports credentials error. Input: `{ "password": "..." }`. Output: `{ success, unlocked }` — **no S3 keys**. See [`protocol-v1.0.6-addendum.md`](../group/shared/protocol-v1.0.6-addendum.md).
 
 ---
 
@@ -256,7 +291,8 @@ Hub capability. **Refs only** — no credentials, no D-MCP password. Vault unloc
 1. Unlock Hub vault.
 2. Managed: store D-MCP password → `encrypted_dmcp_password`.
 3. Edit bucket, connections, S3 keys.
-4. Save → `credentials.sealed.json` + `apply-registry` + optional `ping`.
+4. **Сохранить в Hub** — pairing, bucket profile, D-MCP password → SQLite only (no CLI).
+5. **Синхронизировать portable** — D-MCP CLI: `apply-secrets` (if S3 keys) → `apply-registry` → `validate-config`.
 
 ---
 
@@ -265,24 +301,26 @@ Hub capability. **Refs only** — no credentials, no D-MCP password. Vault unloc
 | ID | Задача | Статус |
 |----|--------|--------|
 | D-H6 | Mapping doc + merge | **done** (2026-07-01) |
-| D-H1 | SQLite schema | **ready** |
-| D-H2 | WPF D-MCP settings | **ready** |
-| D-H3 | Sealed file R/W + test vector | **ready** |
-| D-H4 | DataMcpSyncService | **ready** |
-| D-H5 | `resolve_infobase_context` | **ready** |
+| D-H1 | SQLite schema | **done** (2026-07-02) |
+| D-H2 | WPF D-MCP settings | **done** (2026-07-02) |
+| D-H3 | Sealed file R/W + test vector | **done** (2026-07-02) |
+| D-H4 | DataMcpSyncService | **done** (2026-07-02) |
+| D-H5 | `resolve_infobase_context` + `configadmin mcp serve` | **done** (2026-07-02) |
 
 ---
 
 ## Backlog data-mcp Sub
 
-| P | Задача |
-|---|--------|
-| P1 | `protocol_ack` на merge |
-| P1 | manifest, inventory/status/validate-config CLI |
-| P1 | `credentials.sealed.json` + startup unlock |
-| P1 | export/apply-registry (metadata) |
-| P2 | apply-secrets CLI (optional) |
-| P2 | deprecate plaintext credentials in portable build |
+| P | Задача | Статус |
+|---|--------|--------|
+| P1 | `protocol_ack` на merge | **done** (2026-07-01) |
+| P1 | manifest, inventory/status/validate-config CLI | **done** (2026-07-02) |
+| P1 | `credentials.sealed.json` + startup unlock | **done** (2026-07-02) |
+| P1 | export/apply-registry (metadata) | **done** (2026-07-02) |
+| P2 | apply-secrets CLI | **done** (2026-07-02, ack `20260702T180000`) |
+| P2 | `unlock_credentials` MCP tool | **done** (2026-07-02, ack `20260702T190000`) |
+| P2 | `apply-secrets` credential migration (`credentials_file` + remove plaintext) | **done** (2026-07-02, ack `20260702T210000`) |
+| P2 | deprecate plaintext credentials in portable build | **done** (Sub `seal_and_migrate_credentials`; portable build TBD) |
 
 ---
 
@@ -306,7 +344,29 @@ Hub capability. **Refs only** — no credentials, no D-MCP password. Vault unloc
 | Dispute items | D1 filename, D2 managed UI, D3 §10.3 wording |
 | Head merge | `20260701T170000` — all three resolved per table above |
 | Sub ack | **received** `20260701T172000` (2026-07-01) |
+| Sub P1 complete | `sync_delta` `20260702T140000` (2026-07-02) — portable dual layout, Hub CLI, sealed credentials; 53 tests pass |
+| v1.0.5 ack | **received** `20260702T180000` (2026-07-02) — CLI-only portable writes accepted; `apply-secrets` implemented (21 tests) |
+| v1.0.6 ack | **received** `20260702T190000` (2026-07-02) — passive Hub + `unlock_credentials` accepted; Sub implemented (32 tests) |
+| v1.0.5 §1.3.1 ack | **received** `20260702T210000` (2026-07-02) — apply-secrets credential migration; 8 tests in `test_apply_secrets.py` |
 
 ---
 
-*После Sub `protocol_ack` — начать Phase 1 implementation.*
+## Merge record (v1.0.5 §1.3.1)
+
+| Topic | Resolution |
+|-------|------------|
+| `apply-secrets` migrates `credentials_file` + removes plaintext | Accepted without dispute (`sync_delta` `20260702T210000` → ack `20260702T210000`) |
+| Head portable QA plaintext bypass | Closed — Hub Save must re-verify on rebuilt portable |
+
+---
+
+## Merge record (v1.0.6)
+
+| Topic | Resolution |
+|-------|------------|
+| Passive Hub + agent `unlock_credentials` | Accepted without dispute (`sync_delta` `20260702T120000` → ack `20260702T190000`) |
+| Head D-H5 | `InfobaseContextService` + `configadmin mcp serve` (passive context tools) |
+
+---
+
+*Sub P1 + v1.0.5 + v1.0.6 + v1.0.5 §1.3.1 ack (2026-07-02). Head D-H5 done.*

@@ -29,6 +29,8 @@ On conflict with v1.0.1 §10.3 on data-mcp credentials, this addendum takes prio
 - `apply-registry` fragment **does not** contain S3 keys (as v1.0.1 §8.4).
 - Sealed file write: Hub D-MCP settings UI (managed) or compact UI (standalone); optional Sub CLI `apply-secrets`.
 
+> **Updated by v1.0.6:** runtime unlock via D-MCP MCP tool `unlock_credentials` (agent-mediated); Hub passive — no spawn/unlock. See [`protocol-v1.0.6-addendum.md`](protocol-v1.0.6-addendum.md).
+
 ---
 
 ## 2. D-MCP unlock password in Hub (admin bridge)

@@ -93,6 +93,42 @@ public class ConfigMcpSyncServiceTests
     }
 
     [Fact]
+    public async Task SyncInstancesAsync_OnlySyncsRequestedInstances()
+    {
+        var recordingClient = new RecordingConfigMcpToolClient();
+        var (service, baseInstanceId, instanceRepo, infobaseRepo, _) = await CreateServiceAsync(
+            toolClient: recordingClient);
+        var infobaseId = (await instanceRepo.GetByIdAsync(baseInstanceId))!.InfobaseId;
+        var projectId = Guid.NewGuid();
+
+        await service.LinkInstanceAsync(baseInstanceId, new ConfigMcpLinkRequest
+        {
+            Mode = ConfigMcpLinkMode.NewDatabaseInProject,
+            ProjectId = projectId,
+            ProjectName = "Client / Base"
+        });
+
+        var extensionInstanceId = Guid.NewGuid();
+        await instanceRepo.SaveAsync(new ConfigurationInstance
+        {
+            Id = extensionInstanceId,
+            InfobaseId = infobaseId,
+            Kind = ConfigurationKind.Extension,
+            DisplayName = "Extension A",
+            DesignerName = "ExtensionA",
+            ExportEnabled = true,
+            SortOrder = 1,
+            ConfigMcpProjectId = projectId
+        });
+
+        _ = await service.SyncInstancesAsync([extensionInstanceId]);
+
+        Assert.NotNull(recordingClient.LastFragment);
+        Assert.Single(recordingClient.LastFragment!.RegistryFragment.Projects[0].Databases);
+        Assert.Equal("Extension A", recordingClient.LastFragment.RegistryFragment.Projects[0].Databases[0].Name);
+    }
+
+    [Fact]
     public async Task SyncInstanceAsync_WithoutPriorExport_CreatesExportRecord()
     {
         var (service, instanceId, _, _, exportRepo) = await CreateServiceAsync(withExport: false);
@@ -312,7 +348,9 @@ public class ConfigMcpSyncServiceTests
         Guid InstanceId,
         ConfigurationInstanceRepository InstanceRepo,
         InfobaseRepository InfobaseRepo,
-        ConfigurationExportRepository ExportRepo)> CreateServiceAsync(bool withExport = true)
+        ConfigurationExportRepository ExportRepo)> CreateServiceAsync(
+        bool withExport = true,
+        IConfigMcpToolClient? toolClient = null)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"mcp-sync-{Guid.NewGuid():N}.db");
         var factory = new SqliteConnectionFactory(dbPath);
@@ -389,7 +427,7 @@ public class ConfigMcpSyncServiceTests
             hubProjectRepo,
             instanceRepo,
             fragmentBuilder,
-            new FakeConfigMcpToolClient(),
+            toolClient ?? new FakeConfigMcpToolClient(),
             registryService,
             configService,
             new ConfigMcpProjectsJsonMerger(),
@@ -398,7 +436,20 @@ public class ConfigMcpSyncServiceTests
         return (service, instanceId, instanceRepo, infobaseRepo, exportRepo);
     }
 
-    private sealed class FakeConfigMcpToolClient : IConfigMcpToolClient
+    private sealed class RecordingConfigMcpToolClient : FakeConfigMcpToolClient
+    {
+        public ConfigMcpRegistryFragmentDocument? LastFragment { get; private set; }
+
+        public override Task<(ConfigMcpApplyRegistryResponse Response, JsonCliResult Raw)> ApplyRegistryAsync(
+            ConfigMcpRegistryFragmentDocument fragment,
+            CancellationToken ct = default)
+        {
+            LastFragment = fragment;
+            return base.ApplyRegistryAsync(fragment, ct);
+        }
+    }
+
+    private class FakeConfigMcpToolClient : IConfigMcpToolClient
     {
         public Task<ConfigMcpInventoryResponse> GetInventoryAsync(CancellationToken ct = default) =>
             Task.FromResult(new ConfigMcpInventoryResponse());
@@ -406,7 +457,7 @@ public class ConfigMcpSyncServiceTests
         public Task<ConfigMcpStatusResponse> GetStatusAsync(CancellationToken ct = default) =>
             Task.FromResult(new ConfigMcpStatusResponse());
 
-        public Task<(ConfigMcpApplyRegistryResponse Response, JsonCliResult Raw)> ApplyRegistryAsync(
+        public virtual Task<(ConfigMcpApplyRegistryResponse Response, JsonCliResult Raw)> ApplyRegistryAsync(
             ConfigMcpRegistryFragmentDocument fragment,
             CancellationToken ct = default) =>
             Task.FromResult((new ConfigMcpApplyRegistryResponse

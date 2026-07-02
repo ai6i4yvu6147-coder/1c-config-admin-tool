@@ -53,6 +53,17 @@ public class ConfigMcpFragmentBuilderTests
         Assert.Equal(existingDatabaseId.ToString(), database.InfobaseId);
     }
 
+    [Fact]
+    public async Task BuildForInstanceAsync_DatabaseNameUsesDisplayNameOnly()
+    {
+        var (builder, instanceId, _, _, _) = await CreateFixtureAsync();
+
+        var fragment = await builder.BuildForInstanceAsync(instanceId, "ClientA / BaseERP");
+
+        var database = Assert.Single(fragment.RegistryFragment.Projects[0].Databases);
+        Assert.Equal("Основная конфигурация", database.Name);
+    }
+
     private static async Task<(
         ConfigMcpFragmentBuilder Builder,
         Guid InstanceId,

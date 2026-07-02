@@ -17,7 +17,7 @@ public sealed class MainViewModel : ObservableObject, IRefreshOnNavigate
     private readonly ClientEditViewModel _clientEditViewModel;
     private readonly BaseEditViewModel _baseEditViewModel;
     private readonly ExportViewModel _exportViewModel;
-    private readonly ConfigMcpViewModel _configMcpViewModel;
+    private readonly McpHubViewModel _mcpHubViewModel;
     private readonly RemoteNodesViewModel _remoteNodesViewModel;
     private readonly ConfigurationTemplatesViewModel _templatesViewModel;
     private readonly HubSettingsViewModel _hubSettingsViewModel;
@@ -37,7 +37,7 @@ public sealed class MainViewModel : ObservableObject, IRefreshOnNavigate
         ClientEditViewModel clientEditViewModel,
         BaseEditViewModel baseEditViewModel,
         ExportViewModel exportViewModel,
-        ConfigMcpViewModel configMcpViewModel,
+        McpHubViewModel mcpHubViewModel,
         RemoteNodesViewModel remoteNodesViewModel,
         ConfigurationTemplatesViewModel templatesViewModel,
         HubSettingsViewModel hubSettingsViewModel,
@@ -52,7 +52,7 @@ public sealed class MainViewModel : ObservableObject, IRefreshOnNavigate
         _clientEditViewModel = clientEditViewModel;
         _baseEditViewModel = baseEditViewModel;
         _exportViewModel = exportViewModel;
-        _configMcpViewModel = configMcpViewModel;
+        _mcpHubViewModel = mcpHubViewModel;
         _remoteNodesViewModel = remoteNodesViewModel;
         _templatesViewModel = templatesViewModel;
         _hubSettingsViewModel = hubSettingsViewModel;
@@ -260,7 +260,7 @@ public sealed class MainViewModel : ObservableObject, IRefreshOnNavigate
 
     private void OpenMcp()
     {
-        _navigationService.NavigateTo(_configMcpViewModel);
+        _navigationService.NavigateTo(_mcpHubViewModel);
     }
 
     private void OpenRemoteNodes()

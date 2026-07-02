@@ -145,7 +145,7 @@ public sealed class ConfigMcpFragmentBuilder
         return new ConfigMcpRegistryDatabaseDto
         {
             InfobaseId = registryId.ToString(),
-            Name = $"{infobase.Name} / {instance.DisplayName}",
+            Name = instance.DisplayName.Trim(),
             Type = instance.Kind == ConfigurationKind.Base ? "base" : "extension",
             SourcePath = sourcePath,
             SourceKind = "directory",

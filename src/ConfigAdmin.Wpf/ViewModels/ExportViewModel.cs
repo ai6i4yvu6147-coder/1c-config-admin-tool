@@ -349,7 +349,7 @@ public sealed class ExportViewModel : BusyViewModelBase
                 StatusMessage = $"Выгрузка завершена за {result.Duration:g}. {details}";
 
                 if (SyncToMcpAfterExport && IsMcpSyncAvailable)
-                    await TrySyncToMcpAsync();
+                    await TrySyncToMcpAsync(sessionPlan.Instances.Select(i => i.InstanceId));
             }
             else
             {
@@ -373,11 +373,11 @@ public sealed class ExportViewModel : BusyViewModelBase
         }
     }
 
-    private async Task TrySyncToMcpAsync()
+    private async Task TrySyncToMcpAsync(IEnumerable<Guid> instanceIds)
     {
         try
         {
-            var syncResult = await _configMcpSyncService.SyncInfobaseAsync(_baseId);
+            var syncResult = await _configMcpSyncService.SyncInstancesAsync(instanceIds);
             if (syncResult.Success)
             {
                 var indexHint = syncResult.IndexRebuildsSucceeded > 0

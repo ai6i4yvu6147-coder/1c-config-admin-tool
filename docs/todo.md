@@ -47,16 +47,16 @@ Canon: [`admin-hub/registry-mapping.md`](admin-hub/registry-mapping.md). Impleme
 
 ### Registry mapping (data-mcp) — agreed + ack 2026-07-01
 
-Canon: [`admin-hub/registry-mapping-data-mcp.md`](admin-hub/registry-mapping-data-mcp.md), protocol [`group/shared/protocol-v1.0.4-addendum.md`](group/shared/protocol-v1.0.4-addendum.md). Hub Phase 1 tasks **ready** (code not started).
+Canon: [`admin-hub/registry-mapping-data-mcp.md`](admin-hub/registry-mapping-data-mcp.md), protocol through [`protocol-v1.0.6-addendum.md`](group/shared/protocol-v1.0.6-addendum.md) (ack 2026-07-02). **D-H1–D-H5 done**. **Sub:** `unlock_credentials` MCP ack `20260702T190000`.
 
 | ID | Task | Status |
 |----|------|--------|
 | D-H6 | Mapping doc + merge + Sub ack | **done** (2026-07-01) |
-| D-H1 | SQLite schema | **ready** |
-| D-H2 | WPF D-MCP settings | **ready** |
-| D-H3 | Sealed file R/W + test vector | **ready** |
-| D-H4 | DataMcpSyncService | **ready** |
-| D-H5 | `resolve_infobase_context` | **ready** |
+| D-H1 | SQLite schema | **done** (2026-07-02) |
+| D-H2 | WPF D-MCP settings | **done** (2026-07-02) |
+| D-H3 | Sealed file R/W + test vector | **done** (2026-07-02) |
+| D-H4 | DataMcpSyncService | **done** (2026-07-02) |
+| D-H5 | `resolve_infobase_context` + Hub MCP (passive) | **done** (2026-07-02) |
 
 ---
 
@@ -240,6 +240,6 @@ Optional later: automatic cleanup after success (R2.7 setting).
 | P2 | ConfigAdmin registry sync (Phase 2) |
 | P3 | XML vs archive, auto-discover extensions |
 | P3 | help-mcp links (Phase 3) |
-| P3 | **data-mcp integration** — mapping **agreed + ack** (2026-07-01); Hub Phase 1 (D-H1…D-H5) **ready** — [`registry-mapping-data-mcp.md`](admin-hub/registry-mapping-data-mcp.md) |
+| P3 | **data-mcp integration** — Sub P1 + v1.0.5 ack **done**; D-H1–D-H4 **done** (2026-07-02); Hub Phase 1 (D-H5) **ready** — [`registry-mapping-data-mcp.md`](admin-hub/registry-mapping-data-mcp.md) |
 
 *Updated: 2026-07-02*

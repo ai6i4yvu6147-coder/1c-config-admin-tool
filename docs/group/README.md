@@ -14,7 +14,7 @@ Map of subordinate projects in the 1C + Cursor ecosystem. Shared protocol — in
 | id | epoch | state | last_ack | Path |
 |----|-------|-------|----------|------|
 | `1c-config-mcp` | 0 | stable | 2026-06-30T06:30:05Z | `C:/projects/1c-config-mcp` |
-| `1c-data-mcp` | 0 | stable | 2026-07-01T172000Z | `C:/projects/1c-data-mcp` |
+| `1c-data-mcp` | 0 | stable | 20260702T210000Z | `C:/projects/1c-data-mcp` |
 | `1c-help-mcp` | 0 | stable | 2026-06-30T06:49:49Z | `C:/projects/1c-help-mcp` |
 
 `state`: `negotiating` | `stable` | `stale` | `defer_manual`

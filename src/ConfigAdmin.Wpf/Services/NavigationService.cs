@@ -119,6 +119,7 @@ public sealed class NavigationService : INavigationService
             [typeof(BaseEditViewModel)] = vm => GetBaseEditView((BaseEditViewModel)vm),
             [typeof(ExportViewModel)] = vm => new ExportView { DataContext = vm },
             [typeof(ConfigMcpViewModel)] = vm => new ConfigMcpView { DataContext = vm },
+            [typeof(McpHubViewModel)] = vm => new McpHubView { DataContext = vm },
             [typeof(LogsViewModel)] = vm => new LogsView { DataContext = vm },
             [typeof(HubModeSelectorViewModel)] = vm => new HubModeSelectorView { DataContext = vm },
             [typeof(SyncAgentViewModel)] = vm => new SyncAgentView { DataContext = vm },
